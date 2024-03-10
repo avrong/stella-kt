@@ -3,7 +3,7 @@ plugins {
     antlr
 }
 
-group = "me.avrong"
+group = "me.avrong.stella"
 version = "1.0-SNAPSHOT"
 
 repositories {
@@ -14,6 +14,11 @@ dependencies {
     antlr("org.antlr:antlr4:4.13.1")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
+}
+
+tasks.generateGrammarSource {
+    // Generate base visitor classes
+    arguments.add("-visitor")
 }
 
 tasks.test {
