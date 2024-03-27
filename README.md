@@ -20,6 +20,9 @@ Grammar located in `/src/main/antrl`.
 # Build
 ./gradlew build
 
-# Build & Run
-./gradlew run
+# Build without running internal tests
+./gradlew build -x test
+
+# Run through shadow jar
+java -jar build/libs/shadow.jar
 ```

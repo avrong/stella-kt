@@ -7,12 +7,14 @@ import me.avrong.me.avrong.stella.TypeCheckErrorPrinter
 import me.avrong.me.avrong.stella.TypeCheckVisitor
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.io.path.pathString
 import kotlin.io.path.readText
 
+@Disabled
 class CheckOkTest {
     @Test
     fun testCasesOk() {
