@@ -7,15 +7,21 @@ import me.avrong.me.avrong.stella.TypeCheckErrorPrinter
 import me.avrong.me.avrong.stella.TypeCheckVisitor
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
+import java.util.*
 
 fun main() {
     var source = ""
-    var line = readlnOrNull()
 
-    while (line != null) {
-        source += line
-        line = readlnOrNull()
+    val scanner = Scanner(System.`in`).apply {
+        useDelimiter(System.lineSeparator()) // Use correct line separator
     }
+
+    while (scanner.hasNextLine()) {
+        val line = scanner.nextLine()
+        source += line + "\n"
+    }
+
+    scanner.close()
 
     val inputStream = CharStreams.fromString(source)
     val lexer = StellaLexer(inputStream)
