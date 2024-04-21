@@ -1,9 +1,9 @@
-package me.avrong.me.avrong.stella
+package me.avrong.stella
 
 import StellaParser.*
 import StellaParserBaseVisitor
-import me.avrong.me.avrong.stella.error.*
-import me.avrong.me.avrong.stella.type.*
+import me.avrong.stella.error.*
+import me.avrong.stella.type.*
 
 class TypeCheckVisitor(
     private val context: TypeCheckContext,
@@ -437,9 +437,9 @@ class TypeCheckVisitor(
 
         val fields = mutableListOf<Pair<String, Type>>()
         for (binding in ctx.bindings) {
-            val expectedType =
+            val type =
                 (expectedType as? RecordType)?.fields?.firstOrNull { it.first == binding.name.text }?.second
-            fields.add(Pair(binding.name.text, context.runWithExpected(expectedType) {
+            fields.add(Pair(binding.name.text, context.runWithExpected(type) {
                 binding.rhs.accept(this)
             }))
         }

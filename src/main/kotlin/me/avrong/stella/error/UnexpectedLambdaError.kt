@@ -1,7 +1,7 @@
-package me.avrong.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
-import me.avrong.me.avrong.stella.type.Type
+import me.avrong.stella.type.Type
 
 data class UnexpectedLambdaError(val expected: Type?, val expression: StellaParser.ExprContext) : CheckError {
     override val name: String = "ERROR_UNEXPECTED_LAMBDA"

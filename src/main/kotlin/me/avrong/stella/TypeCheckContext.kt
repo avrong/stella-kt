@@ -1,6 +1,6 @@
-package me.avrong.me.avrong.stella
+package me.avrong.stella
 
-import me.avrong.me.avrong.stella.type.Type
+import me.avrong.stella.type.Type
 
 data class TypeCheckContext(
     private val variableTypes: MutableMap<String, MutableList<Type>> = mutableMapOf(),

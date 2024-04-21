@@ -1,4 +1,4 @@
-package me.avrong.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
 

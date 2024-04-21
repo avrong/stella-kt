@@ -1,7 +1,7 @@
-package me.avrong.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
-import me.avrong.me.avrong.stella.type.Type
+import me.avrong.stella.type.Type
 
 
 data class UnexpectedNullaryVariantPatternError(val expr: StellaParser.PatternContext, val type: Type) : CheckError {

@@ -1,4 +1,4 @@
-package me.avrong.me.avrong.stella.type
+package me.avrong.stella.type
 
 class TupleType(val types: List<Type>) : Type() {
     private val typesStr = types.joinToString(", ")

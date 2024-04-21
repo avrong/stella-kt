@@ -1,8 +1,9 @@
-package me.avrong.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
 
-data class IncorrectNumberOfArgumentsError(val actual: Int, val expected: Int, val expression: StellaParser.ExprContext) : CheckError {
+data class IncorrectNumberOfArgumentsError(val actual: Int, val expected: Int, val expression: StellaParser.ExprContext) :
+    CheckError {
     override val name: String = "ERROR_INCORRECT_NUMBER_OF_ARGUMENTS"
 
     override fun getDescription(parser: StellaParser): String = """

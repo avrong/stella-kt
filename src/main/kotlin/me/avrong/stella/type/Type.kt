@@ -1,4 +1,4 @@
-package me.avrong.me.avrong.stella.type
+package me.avrong.stella.type
 
 abstract class Type {
     abstract val name : String

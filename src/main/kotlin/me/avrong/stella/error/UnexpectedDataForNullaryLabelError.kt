@@ -1,7 +1,7 @@
-package me.avrong.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
-import me.avrong.me.avrong.stella.type.Type
+import me.avrong.stella.type.Type
 
 data class UnexpectedDataForNullaryLabelError(val expr: StellaParser.ExprContext, val type: Type) : CheckError {
     override val name: String = "ERROR_UNEXPECTED_DATA_FOR_NULLARY_LABEL"

@@ -2,9 +2,6 @@ package me.avrong.stella
 
 import StellaLexer
 import StellaParser
-import me.avrong.me.avrong.stella.TypeCheckContext
-import me.avrong.me.avrong.stella.TypeCheckErrorPrinter
-import me.avrong.me.avrong.stella.TypeCheckVisitor
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
 import org.junit.jupiter.api.Disabled

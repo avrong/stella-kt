@@ -1,8 +1,8 @@
-package me.avrong.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
-import me.avrong.me.avrong.stella.type.RecordType
-import me.avrong.me.avrong.stella.type.Type
+import me.avrong.stella.type.RecordType
+import me.avrong.stella.type.Type
 
 data class UnexpectedRecordFieldsError(
     val expected: Type?,
