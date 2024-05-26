@@ -1,7 +1,6 @@
 package me.avrong.stella.error
 
 import StellaParser
-import kotlin.system.exitProcess
 
 interface CheckError {
     val name: String
@@ -13,8 +12,6 @@ interface CheckError {
 
     fun emit(parser: StellaParser): Nothing {
         val message = getMessage(parser)
-        println(message)
-
-        exitProcess(1)
+        throw RuntimeException(message)
     }
 }

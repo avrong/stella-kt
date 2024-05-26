@@ -4,23 +4,24 @@ import StellaLexer
 import StellaParser
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Paths
-import kotlin.io.path.pathString
+import kotlin.io.path.name
 import kotlin.io.path.readText
 
-class CheckOkTest {
+class CheckBadTest {
     @Test
-    fun testCasesOk() {
-        val testsPath = Paths.get("").toAbsolutePath().resolve("stella-tests/ok/")
-        val stellaTests = Files.walk(testsPath)
-            .filter { item -> Files.isRegularFile(item) && item.pathString.endsWith(".st")  }
+    fun testBadData() {
+        val resourcesPath = Paths.get("").toAbsolutePath().resolve("stella-tests/bad/")
+        val stellaTests = Files.walk(resourcesPath)
+            .filter { item -> Files.isRegularFile(item) }
+            .filter { item -> item.toString().endsWith(".st") }
 
-        var all = 0
+        var noError = 0
         var ok = 0
         var wrong = 0
+        var all = 0
 
         for (testFile in stellaTests) {
             val lexer = StellaLexer(CharStreams.fromString(testFile.readText()))
@@ -30,22 +31,25 @@ class CheckOkTest {
             val typeCheckErrorPrinter = TypeCheckErrorPrinter(parser)
             val typeCheckVisitor = TypeCheckVisitor(typeCheckContext, typeCheckErrorPrinter)
 
-            println(testFile)
-
             try {
                 parser.program().accept(typeCheckVisitor)
-                println("OK ${testFile.fileName}")
-                ok += 1
+                println("WRONG (NO ERROR) result for ${testFile.parent.name} in ${testFile.fileName}")
+                noError += 1
             } catch (e: RuntimeException) {
-                println("WRONG ${testFile.fileName}:\n${e.message}")
-                wrong += 1
+                if (e.message?.contains(testFile.parent.name) != true) {
+                    println("WRONG result for ${testFile.parent.name} in ${testFile.fileName}:\n${e.message}")
+                    wrong += 1
+                } else {
+                    println("OK ${testFile.parent.name} in ${testFile.fileName}")
+                    ok += 1
+                }
             }
 
             println()
             all += 1
         }
 
-        val resultMessage = "$all DONE: $ok OK, $wrong WRONG"
+        val resultMessage = "$all DONE: $ok OK, $wrong WRONG, $noError NOERROR"
         println(resultMessage)
 
         if (all != ok) {

@@ -411,7 +411,7 @@ class TypeCheckVisitor(
                 }
             }
 
-            else -> throw IllegalStateException()
+            else -> throw IllegalStateException("Illegal state at pattern")
         }
     }
 

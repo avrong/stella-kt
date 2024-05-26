@@ -5,6 +5,7 @@ import StellaParser
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
 import java.util.*
+import kotlin.system.exitProcess
 
 fun main() {
     var source = ""
@@ -27,5 +28,11 @@ fun main() {
     val typeCheckContext = TypeCheckContext()
     val typeCheckErrorPrinter = TypeCheckErrorPrinter(parser)
     val typeCheckVisitor = TypeCheckVisitor(typeCheckContext, typeCheckErrorPrinter)
-    parser.program().accept(typeCheckVisitor)
+
+    try {
+        parser.program().accept(typeCheckVisitor)
+    } catch (e: RuntimeException) {
+        System.err.println(e.message)
+        exitProcess(1)
+    }
 }
