@@ -3,6 +3,11 @@ package me.avrong.stella
 import StellaParser.*
 import StellaParserBaseVisitor
 import me.avrong.stella.error.*
+import me.avrong.stella.me.avrong.stella.error.AmbiguousPanicTypeError
+import me.avrong.stella.me.avrong.stella.error.AmbiguousReferenceTypeError
+import me.avrong.stella.me.avrong.stella.error.NotAReferenceError
+import me.avrong.stella.me.avrong.stella.error.UnexpectedMemoryAddressError
+import me.avrong.stella.me.avrong.stella.type.RefType
 import me.avrong.stella.type.*
 
 class TypeCheckVisitor(
@@ -673,6 +678,69 @@ class TypeCheckVisitor(
     override fun visitTypeBool(ctx: TypeBoolContext) = BoolType
     override fun visitTypeUnit(ctx: TypeUnitContext): Type = UnitType
     override fun visitTypeNat(ctx: TypeNatContext): Type = NatType
+    override fun visitTypeRef(ctx: TypeRefContext): Type = RefType(ctx.stellatype().accept(this))
+
+    override fun visitPanic(ctx: PanicContext): Type = context.getExpectedType() ?:
+        errorPrinter.printError(AmbiguousPanicTypeError(ctx))
+
+    override fun visitSequence(ctx: SequenceContext): Type {
+        val leftType = context.runWithExpected(UnitType) {
+            ctx.expr1.accept(this)
+        }
+
+        if (leftType == UnitType) {
+            errorPrinter.printError(UnexpectedTypeForExpressionError(UnitType, leftType, ctx.expr1))
+        }
+
+        return ctx.expr2.accept(this)
+    }
+
+    override fun visitConstMemory(ctx: ConstMemoryContext): Type {
+        val expectedType = context.getExpectedType() ?:
+            errorPrinter.printError(AmbiguousReferenceTypeError(ctx))
+
+        if (expectedType !is RefType) {
+            errorPrinter.printError(UnexpectedMemoryAddressError(ctx, expectedType))
+        }
+
+        return expectedType
+    }
+
+    override fun visitRef(ctx: RefContext): Type {
+        val nestedType = context.runWithExpected((context.getExpectedType() as? RefType)?.innerType) {
+            ctx.expr().accept(this)
+        }
+
+        return RefType(nestedType)
+    }
+
+    override fun visitDeref(ctx: DerefContext): Type {
+        val expressionType = context.runWithExpected(context.getExpectedType()?.let { RefType(it) }) {
+            ctx.expr().accept(this)
+        }
+        if (expressionType !is RefType) {
+            errorPrinter.printError(NotAReferenceError(ctx))
+        }
+
+        return expressionType.innerType
+    }
+
+    override fun visitAssign(ctx: AssignContext): Type {
+        val leftType = context.runWithExpected(null) { ctx.lhs.accept(this) }
+
+        if (leftType !is RefType) {
+            errorPrinter.printError(NotAReferenceError(ctx))
+        }
+
+        val rightType = context.runWithExpected(leftType.innerType) { ctx.rhs.accept(this) }
+
+        if (leftType.innerType != rightType) {
+            errorPrinter.printError(UnexpectedTypeForExpressionError(leftType.innerType, rightType, ctx))
+        }
+
+        return UnitType
+    }
+
 
     private fun getVariablesInfoFromPattern(pattern: PatternContext, type: Type): List<Pair<String, Type>> {
         return when (pattern) {
