@@ -83,7 +83,6 @@ TRY : 'try' ;
 CATCH : 'catch' ;
 TOP_TYPE : 'Top' ;
 BOTTOM_TYPE : 'Bot' ;
-AUTO_TYPE : 'auto' ;
 GENERIC : 'generic' ;
 FORALL : 'forall' ;
 COMMENT_antlr_builtin
