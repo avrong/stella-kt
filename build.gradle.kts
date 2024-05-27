@@ -35,6 +35,10 @@ tasks.generateGrammarSource {
 
 tasks.test {
     useJUnitPlatform()
+
+    testLogging {
+        events("failed")
+    }
 }
 
 kotlin {
