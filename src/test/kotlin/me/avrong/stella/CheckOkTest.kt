@@ -4,7 +4,6 @@ import StellaLexer
 import StellaParser
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -13,7 +12,7 @@ import kotlin.io.path.readText
 
 class CheckOkTest {
     @Test
-    fun testCasesOk() {
+    fun testOkCases() {
         val testsPath = Paths.get("").toAbsolutePath().resolve("stella-tests/ok/")
         val stellaTests = Files.walk(testsPath)
             .filter { item -> Files.isRegularFile(item) && item.pathString.endsWith(".st")  }

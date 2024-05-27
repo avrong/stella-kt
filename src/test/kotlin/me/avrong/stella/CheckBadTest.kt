@@ -12,7 +12,7 @@ import kotlin.io.path.readText
 
 class CheckBadTest {
     @Test
-    fun testBadData() {
+    fun testBadCases() {
         val resourcesPath = Paths.get("").toAbsolutePath().resolve("stella-tests/bad/")
         val stellaTests = Files.walk(resourcesPath)
             .filter { item -> Files.isRegularFile(item) }

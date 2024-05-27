@@ -538,21 +538,71 @@ class TypeCheckVisitor(
     override fun visitLetRec(ctx: LetRecContext): Type {
         val variables = mutableListOf<Pair<String, Type>>()
 
-        val patternBindingType = context.runWithTypes(variables) { ctx.patternBinding.expr().accept(this) }
-        val patternVars = getVariablesTypesFromPattern(ctx.patternBinding.pattern(), patternBindingType)
-        variables.addAll(patternVars)
+        for (binding in ctx.patternBindings) {
+            val pattern = binding.pattern()
+            if (pattern !is PatternAscContext) {
+                errorPrinter.printError(AmbiguousPatternTypeError(binding.pattern()))
+            }
 
-        return context.runWithTypes(variables) { ctx.expr().accept(this) }
+            val expectedPatternType = pattern.stellatype().accept(this)
+            val vars = getVariablesInfoFromPattern(binding.pattern(), expectedPatternType)
+
+            val duplicate = vars.map { it.first }
+                .groupingBy { it }
+                .eachCount()
+                .asIterable()
+                .firstOrNull { it.value > 1 }
+
+            if (duplicate != null) {
+                errorPrinter.printError(DuplicatePatternVariableError(binding.pattern(), duplicate.key))
+            }
+            variables.addAll(vars)
+
+            val bindingType = context.runWithExpected(expectedPatternType) {
+                context.runWithTypes(variables) { binding.expr().accept(this) }
+            }
+
+            if (expectedPatternType == bindingType) {
+                errorPrinter.printError(UnexpectedPatternForTypeError(bindingType, pattern))
+            }
+
+            if (!isExhaustive(listOf(binding.pattern()), bindingType
+            )) {
+                errorPrinter.printError(NonExhaustiveLetPatternsError(bindingType, ctx))
+            }
+        }
+
+        return context.runWithTypes(variables) {
+            ctx.expr().accept(this)
+        }
     }
 
     override fun visitLet(ctx: LetContext): Type {
         val variables = mutableListOf<Pair<String, Type>>()
 
-        val patternBindingType = context.runWithTypes(variables) { ctx.patternBinding.expr().accept(this) }
-        val patternVars = getVariablesTypesFromPattern(ctx.patternBinding.pattern(), patternBindingType)
-        variables.addAll(patternVars)
+        for (binding in ctx.patternBindings) {
+            val bindingType = context.runWithExpected(null) {
+                context.runWithTypes(variables) { binding.expr().accept(this) }
+            }
 
-        return context.runWithTypes(variables) { ctx.expr().accept(this) }
+            if (!isExhaustive(listOf(binding.pattern()), bindingType)) {
+                errorPrinter.printError(NonExhaustiveLetPatternsError(bindingType, ctx))
+            }
+
+            val vars = getVariablesInfoFromPattern(binding.pattern(), bindingType)
+            val duplicate = vars.map { it.first }.groupingBy { it }.eachCount().asIterable()
+                .firstOrNull { it.value > 1 }
+
+            if (duplicate != null) {
+                errorPrinter.printError(DuplicatePatternVariableError(binding.pattern(), duplicate.key))
+            }
+
+            variables.addAll(vars)
+        }
+
+        return context.runWithTypes(variables) {
+            ctx.expr().accept(this)
+        }
     }
 
     override fun visitTuple(ctx: TupleContext): Type {
@@ -623,4 +673,118 @@ class TypeCheckVisitor(
     override fun visitTypeBool(ctx: TypeBoolContext) = BoolType
     override fun visitTypeUnit(ctx: TypeUnitContext): Type = UnitType
     override fun visitTypeNat(ctx: TypeNatContext): Type = NatType
+
+    private fun getVariablesInfoFromPattern(pattern: PatternContext, type: Type): List<Pair<String, Type>> {
+        return when (pattern) {
+            is PatternVarContext -> listOf(Pair(pattern.name.text, type))
+
+            is ParenthesisedPatternContext -> getVariablesInfoFromPattern(pattern.pattern(), type)
+
+            is PatternFalseContext -> {
+                if (type != BoolType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                listOf()
+            }
+
+            is PatternTrueContext -> {
+                if (type != BoolType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                listOf()
+            }
+
+            is PatternUnitContext -> {
+                if (type != UnitType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                listOf()
+            }
+
+            is PatternInlContext -> {
+                if (type !is SumType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                getVariablesInfoFromPattern(pattern.pattern(), type.right)
+            }
+
+            is PatternInrContext -> {
+                if (type !is SumType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                getVariablesInfoFromPattern(pattern.pattern(), type.right)
+            }
+
+            is PatternIntContext -> {
+                if (type != NatType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                listOf()
+            }
+
+            is PatternSuccContext -> {
+                if (type != NatType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                getVariablesInfoFromPattern(pattern.pattern(), type)
+            }
+
+            is PatternRecordContext -> {
+                if (type !is RecordType || pattern.patterns.map { it.label.text }.toSet() !=
+                    type.fields.map { it.first }.toSet()) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+
+                buildList { pattern.patterns.forEach { addAll(getVariablesInfoFromPattern(it.pattern(),
+                    type.fields.first { f -> f.first == it.label.text }.second)) } }
+            }
+
+            is PatternTupleContext -> {
+                if (type !is TupleType || type.types.size != pattern.patterns.size) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+
+                pattern.patterns.withIndex().flatMap {
+                    getVariablesInfoFromPattern(it.value, type.types[it.index])
+                }
+            }
+
+            is PatternVariantContext -> {
+                if (type !is VariantType || !type.variants.any { it.first == pattern.label.text }) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                val labelType = type.variants.first { it.first == pattern.label.text }.second
+                if (labelType != null && pattern.pattern() == null) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                if (labelType == null && pattern.pattern() != null) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                labelType?.let {
+                    getVariablesInfoFromPattern(pattern.pattern(), it)
+                } ?: listOf()
+            }
+
+            is PatternListContext -> {
+                if (type !is ListType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                pattern.patterns.flatMap { getVariablesInfoFromPattern(it, type.contentType) }
+            }
+
+            is PatternConsContext -> {
+                if (type !is ListType) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                buildList {
+                    addAll(getVariablesInfoFromPattern(pattern.head, type.contentType))
+                    addAll(getVariablesInfoFromPattern(pattern.tail, type))
+                }
+            }
+
+            is PatternAscContext -> getVariablesInfoFromPattern(pattern.pattern(), type)
+
+            else -> throw IllegalStateException("Unexpected pattern context")
+        }
+    }
 }
