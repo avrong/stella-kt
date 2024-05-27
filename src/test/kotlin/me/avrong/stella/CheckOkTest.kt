@@ -29,8 +29,6 @@ class CheckOkTest {
             val typeCheckErrorPrinter = TypeCheckErrorPrinter(parser)
             val typeCheckVisitor = TypeCheckVisitor(typeCheckContext, typeCheckErrorPrinter)
 
-            println(testFile)
-
             try {
                 parser.program().accept(typeCheckVisitor)
                 println("OK ${testFile.fileName}")

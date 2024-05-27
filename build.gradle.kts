@@ -34,10 +34,14 @@ tasks.generateGrammarSource {
 }
 
 tasks.test {
+    dependsOn("cleanTest")
+
     useJUnitPlatform()
 
     testLogging {
         events("failed")
+
+        showStandardStreams = true
     }
 }
 
