@@ -741,6 +741,53 @@ class TypeCheckVisitor(
         return UnitType
     }
 
+    override fun visitDeclExceptionType(ctx: DeclExceptionTypeContext): Type {
+        val type = ctx.exceptionType.accept(this)
+        context.declaredExceptionsType = type
+
+        return type
+    }
+
+    override fun visitTryCatch(ctx: TryCatchContext): Type {
+        val tryType = ctx.tryExpr.accept(this)
+        val variablesFromPattern = getVariablesInfoFromPattern(
+            ctx.pattern(),
+            context.declaredExceptionsType ?: errorPrinter.printError(ExceptionTypeNotDeclaredError(ctx))
+        )
+
+        val fallbackType = context.runWithTypes(variablesFromPattern) {
+            context.runWithExpected(tryType) { ctx.fallbackExpr.accept(this) }
+        }
+
+        if (tryType != fallbackType) {
+            errorPrinter.printError(UnexpectedTypeForExpressionError(tryType, fallbackType, ctx))
+        }
+
+        return tryType
+    }
+
+    override fun visitThrow(ctx: ThrowContext): Type {
+        val declaredExceptionType = context.declaredExceptionsType
+            ?: errorPrinter.printError(ExceptionTypeNotDeclaredError(ctx))
+
+        val exprType = context.runWithExpected(declaredExceptionType) { ctx.expr().accept(this) }
+        if (declaredExceptionType != exprType) {
+            errorPrinter.printError(UnexpectedTypeForExpressionError(declaredExceptionType, exprType, ctx))
+        }
+
+        return context.getExpectedType() ?: errorPrinter.printError(AmbiguousThrowTypeError(ctx))
+    }
+
+    override fun visitTryWith(ctx: TryWithContext): Type {
+        val tryType = ctx.tryExpr.accept(this)
+        val fallbackType = context.runWithExpected(tryType) { ctx.fallbackExpr.accept(this) }
+
+        if (tryType != fallbackType) {
+            errorPrinter.printError(UnexpectedTypeForExpressionError(tryType, fallbackType, ctx))
+        }
+
+        return tryType
+    }
 
     private fun getVariablesInfoFromPattern(pattern: PatternContext, type: Type): List<Pair<String, Type>> {
         return when (pattern) {
