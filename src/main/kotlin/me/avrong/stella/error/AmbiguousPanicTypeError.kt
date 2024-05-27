@@ -1,7 +1,6 @@
-package me.avrong.stella.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
-import me.avrong.stella.error.CheckError
 
 data class AmbiguousPanicTypeError(val expression: StellaParser.ExprContext) : CheckError {
     override val name: String = "ERROR_AMBIGUOUS_PANIC_TYPE"

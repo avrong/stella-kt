@@ -3,11 +3,11 @@ package me.avrong.stella
 import StellaParser.*
 import StellaParserBaseVisitor
 import me.avrong.stella.error.*
-import me.avrong.stella.me.avrong.stella.error.AmbiguousPanicTypeError
-import me.avrong.stella.me.avrong.stella.error.AmbiguousReferenceTypeError
-import me.avrong.stella.me.avrong.stella.error.NotAReferenceError
-import me.avrong.stella.me.avrong.stella.error.UnexpectedMemoryAddressError
-import me.avrong.stella.me.avrong.stella.type.RefType
+import me.avrong.stella.error.AmbiguousPanicTypeError
+import me.avrong.stella.error.AmbiguousReferenceTypeError
+import me.avrong.stella.error.NotAReferenceError
+import me.avrong.stella.error.UnexpectedMemoryAddressError
+import me.avrong.stella.type.RefType
 import me.avrong.stella.type.*
 
 class TypeCheckVisitor(

@@ -1,7 +1,6 @@
-package me.avrong.stella.me.avrong.stella.error
+package me.avrong.stella.error
 
 import StellaParser
-import me.avrong.stella.error.CheckError
 import me.avrong.stella.type.Type
 
 data class UnexpectedMemoryAddressError(val expression: StellaParser.ExprContext, val type: Type) : CheckError {
