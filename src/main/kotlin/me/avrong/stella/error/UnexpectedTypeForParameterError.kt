@@ -9,10 +9,10 @@ data class UnexpectedTypeForParameterError(val expected: Type, val actual: Type?
 
     override fun getDescription(parser: StellaParser): String = """
         параметр ожидаемого типа
-          $expected
+            $expected
         не соответствует актуальному
-          $actual
+            $actual
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

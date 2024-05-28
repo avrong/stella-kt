@@ -9,10 +9,10 @@ data class UnexpectedVariantLabelError(val label: String, val type: VariantType,
 
     override fun getDescription(parser: StellaParser): String = """
         неожиданная метка 
-          $label
+            $label
         для типа варианта
-          $type
+            $type
         в выражении
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

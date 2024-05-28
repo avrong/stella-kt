@@ -8,8 +8,8 @@ data class UnexpectedRecordError(val expected: Type?, val expression: StellaPars
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается не тип записи
-          $expected
+            $expected
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

@@ -10,8 +10,8 @@ data class UnexpectedVariantError(
     override val name: String = "ERROR_UNEXPECTED_VARIANT"
 
     override fun getDescription(parser: StellaParser): String = """
-        получена вариант 
-          ${expression.toStringTree(parser)}
+        получен вариант 
+            ${expression.toStringTree(parser)}
         но ожидается не вариантный тип
     """.trimIndent()
 }

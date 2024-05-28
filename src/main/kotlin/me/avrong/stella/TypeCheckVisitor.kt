@@ -1,5 +1,6 @@
 package me.avrong.stella
 
+import StellaExtensions
 import StellaParser.*
 import StellaParserBaseVisitor
 import me.avrong.stella.error.*
@@ -9,13 +10,19 @@ import me.avrong.stella.error.NotAReferenceError
 import me.avrong.stella.error.UnexpectedMemoryAddressError
 import me.avrong.stella.type.RefType
 import me.avrong.stella.type.*
+import kotlin.math.exp
 
 class TypeCheckVisitor(
     private val context: TypeCheckContext,
     private val errorPrinter: TypeCheckErrorPrinter
 ) : StellaParserBaseVisitor<Type>() {
+
     override fun visitProgram(ctx: ProgramContext): Type {
         var mainType: Type? = null
+
+        for (extension in ctx.extensions) {
+            extension.accept(this)
+        }
 
         for (decl in ctx.decls) {
             val type = decl.accept(this)
@@ -37,6 +44,13 @@ class TypeCheckVisitor(
         return mainType
     }
 
+    override fun visitAnExtension(ctx: AnExtensionContext): Type {
+        val extensionNames = ctx.extensionNames.map { it.toString() }
+        context.extensions.addAll(extensionNames)
+
+        return UnitType
+    }
+
     override fun visitDeclFun(ctx: DeclFunContext): Type {
         val params = ctx.paramDecls
         val paramTypes = params.map { Pair(it.name.text, it.paramType.accept(this)) }
@@ -44,7 +58,7 @@ class TypeCheckVisitor(
         val returnType = ctx.returnType.accept(this)
         val funcType = FuncType(paramTypes.map { it.second }, returnType)
 
-        return context.runWithTypes<Type>(paramTypes.plus(Pair(ctx.name.text, funcType))) {
+        return context.runWithTypes<Type>(paramTypes + Pair(ctx.name.text, funcType)) {
             val nestedFunctions = ctx.localDecls.filterIsInstance<DeclFunContext>().map {
                 Pair(it.name.text, it.accept(this))
             }
@@ -53,14 +67,8 @@ class TypeCheckVisitor(
                 context.runWithExpected(returnType) {
                     val returnExpressionType = ctx.returnExpr.accept(this)
 
-                    if (returnType != returnExpressionType) {
-                        errorPrinter.printError(
-                            UnexpectedTypeForExpressionError(
-                                returnType,
-                                returnExpressionType,
-                                ctx.returnExpr
-                            )
-                        )
+                    if (returnExpressionType.isNotApplicable(returnType)) {
+                        errorPrinter.printError(unexpectedTypeError(returnType, returnExpressionType, ctx.returnExpr))
                     }
 
                     funcType
@@ -71,7 +79,7 @@ class TypeCheckVisitor(
 
     override fun visitIsZero(ctx: IsZeroContext): Type {
         val argType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (argType != NatType) errorPrinter.printError(UnexpectedTypeForExpressionError(NatType, argType, ctx))
+        if (argType != NatType) errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
         return BoolType
     }
 
@@ -94,10 +102,7 @@ class TypeCheckVisitor(
     override fun visitList(ctx: ListContext): Type {
         val expectedType = context.getExpectedType()
         if (expectedType != null && expectedType !is ListType) errorPrinter.printError(
-            UnexpectedListError(
-                expectedType,
-                ctx
-            )
+            UnexpectedListError(expectedType, ctx)
         )
         if (ctx.exprs.isEmpty()) return expectedType ?: errorPrinter.printError(AmbiguousListError(ctx))
 
@@ -108,8 +113,8 @@ class TypeCheckVisitor(
         context.runWithExpected(firstElemType) {
             ctx.exprs.drop(1).forEach {
                 val exprType = it.accept(this)
-                if (firstElemType != exprType) {
-                    errorPrinter.printError(UnexpectedTypeForExpressionError(firstElemType, exprType, ctx))
+                if (exprType.isNotApplicable(firstElemType)) {
+                    errorPrinter.printError(unexpectedTypeError(firstElemType, exprType, ctx))
                 }
             }
         }
@@ -148,7 +153,7 @@ class TypeCheckVisitor(
             val expectedParamType = expectedArgTypes?.get(i)
             val paramType = context.runWithExpected(expectedParamType) { params[i].stellatype().accept(this) }
 
-            if (expectedParamType != null && paramType != expectedParamType) {
+            if (expectedParamType != null && paramType.isNotApplicable(expectedParamType)) {
                 errorPrinter.printError(UnexpectedTypeForParameterError(paramType, expectedParamType, ctx))
             }
 
@@ -172,27 +177,17 @@ class TypeCheckVisitor(
             ?: errorPrinter.printError(UnexpectedVariantLabelError(variantLabel, expectedType, ctx))
 
         if (expectedLabel.second == null && ctx.rhs != null) errorPrinter.printError(
-            UnexpectedDataForNullaryLabelError(
-                ctx,
-                expectedType
-            )
+            UnexpectedDataForNullaryLabelError(ctx, expectedType)
         )
         if (expectedLabel.second != null && ctx.rhs == null) errorPrinter.printError(
-            MissingDataForLabelError(
-                ctx,
-                expectedType
-            )
+            MissingDataForLabelError(ctx, expectedType)
         )
 
         if (ctx.rhs != null) {
             val variantType = context.runWithExpected(expectedLabel.second) { ctx.rhs.accept(this) }
 
-            if (expectedLabel.second!! != variantType) errorPrinter.printError(
-                UnexpectedTypeForExpressionError(
-                    expectedLabel.second!!,
-                    variantType,
-                    ctx
-                )
+            if (variantType.isNotApplicable(expectedLabel.second!!)) errorPrinter.printError(
+                unexpectedTypeError(expectedLabel.second!!, variantType, ctx)
             )
         }
 
@@ -203,18 +198,14 @@ class TypeCheckVisitor(
     override fun visitIf(ctx: IfContext): Type {
         val conditionType = context.runWithExpected(BoolType) { ctx.condition.accept(this) }
         if (conditionType != BoolType) errorPrinter.printError(
-            UnexpectedTypeForExpressionError(
-                BoolType,
-                conditionType,
-                ctx
-            )
+            unexpectedTypeError(BoolType, conditionType, ctx)
         )
 
         val thenType = ctx.thenExpr.accept(this)
         val elseType = ctx.elseExpr.accept(this)
 
-        if (thenType != elseType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(thenType, elseType, ctx))
+        if (elseType.isNotApplicable(thenType)) {
+            errorPrinter.printError(unexpectedTypeError(thenType, elseType, ctx))
         }
 
         return thenType
@@ -235,12 +226,8 @@ class TypeCheckVisitor(
         for (i in funType.argTypes.indices) {
             val expectedType = funType.argTypes[i]
             val exprType = context.runWithExpected(expectedType) { ctx.args[i].accept(this) }
-            if (expectedType != exprType) errorPrinter.printError(
-                UnexpectedTypeForExpressionError(
-                    expectedType,
-                    exprType,
-                    ctx
-                )
+            if (exprType.isNotApplicable(expectedType)) errorPrinter.printError(
+                unexpectedTypeError(expectedType, exprType, ctx)
             )
         }
 
@@ -258,7 +245,7 @@ class TypeCheckVisitor(
     override fun visitSucc(ctx: SuccContext): Type {
         val argType = context.runWithExpected(NatType) { ctx.n.accept(this) }
         if (argType != NatType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(NatType, argType, ctx))
+            errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
         }
 
         return NatType
@@ -293,14 +280,18 @@ class TypeCheckVisitor(
             errorPrinter.printError(IllegalEmptyMatchingError(ctx))
         }
 
+        val isExhaustive = isExhaustive(cases.map { it.pattern() }, expressionType, this)
+
         val casesType = processMatchCase(cases.first(), expressionType)
 
         cases.drop(1).forEach {
             val caseType = processMatchCase(it, expressionType)
-            if (casesType != caseType) {
-                errorPrinter.printError(UnexpectedTypeForExpressionError(casesType, caseType, ctx))
+            if (caseType.isNotApplicable(casesType)) {
+                errorPrinter.printError(unexpectedTypeError(casesType, caseType, ctx))
             }
         }
+
+        if (!isExhaustive) errorPrinter.printError(NonExhaustiveMatchPatternsError(expressionType, ctx))
 
         return casesType
     }
@@ -478,7 +469,7 @@ class TypeCheckVisitor(
 
     override fun visitPred(ctx: PredContext): Type {
         val argType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (argType != NatType) errorPrinter.printError(UnexpectedTypeForExpressionError(NatType, argType, ctx))
+        if (argType != NatType) errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
 
         return NatType
     }
@@ -487,12 +478,8 @@ class TypeCheckVisitor(
         val expectedType = ctx.stellatype().accept(this)
         val expressionType = context.runWithExpected(expectedType) { ctx.expr().accept(this) }
 
-        if (expectedType != expressionType) errorPrinter.printError(
-            UnexpectedTypeForExpressionError(
-                expectedType,
-                expressionType,
-                ctx
-            )
+        if (expressionType.isNotApplicable(expectedType)) errorPrinter.printError(
+            unexpectedTypeError(expectedType, expressionType, ctx)
         )
 
         return expectedType
@@ -500,13 +487,14 @@ class TypeCheckVisitor(
 
     override fun visitNatRec(ctx: NatRecContext): Type {
         val nType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (nType != NatType) errorPrinter.printError(UnexpectedTypeForExpressionError(NatType, nType, ctx))
+        if (nType != NatType) errorPrinter.printError(unexpectedTypeError(NatType, nType, ctx))
 
         val zType = ctx.initial.accept(this)
         val expectedSType = FuncType(listOf(NatType), FuncType(listOf(zType), zType))
         val sType = context.runWithExpected(expectedSType) { ctx.step.accept(this) }
 
-        if (expectedSType != sType) errorPrinter.printError(UnexpectedTypeForExpressionError(expectedSType, sType, ctx))
+        if (sType.isNotApplicable(expectedSType))
+            errorPrinter.printError(unexpectedTypeError(expectedSType, sType, ctx))
 
         return zType
     }
@@ -533,8 +521,8 @@ class TypeCheckVisitor(
         }
 
         val expectedType = FuncType(expressionType.argTypes, expressionType.argTypes.first())
-        if (expectedType != expressionType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(expectedType, expressionType, ctx))
+        if (expressionType.isNotApplicable(expectedType)) {
+            errorPrinter.printError(unexpectedTypeError(expectedType, expressionType, ctx))
         }
 
         return expectedType.argTypes.first()
@@ -544,12 +532,11 @@ class TypeCheckVisitor(
         val variables = mutableListOf<Pair<String, Type>>()
 
         for (binding in ctx.patternBindings) {
-            val pattern = binding.pattern()
-            if (pattern !is PatternAscContext) {
-                errorPrinter.printError(AmbiguousPatternTypeError(binding.pattern()))
-            }
+            val (pattern, expectedPatternType) = unwrapPattern(binding.pattern(), this)
 
-            val expectedPatternType = pattern.stellatype().accept(this)
+            if (expectedPatternType == null)
+                errorPrinter.printError(AmbiguousPatternTypeError(binding.pattern()))
+
             val vars = getVariablesInfoFromPattern(binding.pattern(), expectedPatternType)
 
             val duplicate = vars.map { it.first }
@@ -567,12 +554,11 @@ class TypeCheckVisitor(
                 context.runWithTypes(variables) { binding.expr().accept(this) }
             }
 
-            if (expectedPatternType == bindingType) {
+            if (bindingType.isNotApplicable(expectedPatternType)) {
                 errorPrinter.printError(UnexpectedPatternForTypeError(bindingType, pattern))
             }
 
-            if (!isExhaustive(listOf(binding.pattern()), bindingType
-            )) {
+            if (!isExhaustive(listOf(binding.pattern()), bindingType, this)) {
                 errorPrinter.printError(NonExhaustiveLetPatternsError(bindingType, ctx))
             }
         }
@@ -586,18 +572,23 @@ class TypeCheckVisitor(
         val variables = mutableListOf<Pair<String, Type>>()
 
         for (binding in ctx.patternBindings) {
+            val (pattern, expectedPatternType) = unwrapPattern(binding.pattern(), this)
+
             val bindingType = context.runWithExpected(null) {
                 context.runWithTypes(variables) { binding.expr().accept(this) }
             }
 
-            if (!isExhaustive(listOf(binding.pattern()), bindingType)) {
+            if (expectedPatternType != null && bindingType.isNotApplicable(expectedPatternType)) {
+                errorPrinter.printError(UnexpectedPatternForTypeError(expectedPatternType, pattern))
+            }
+
+            if (!isExhaustive(listOf(binding.pattern()), bindingType, this)) {
                 errorPrinter.printError(NonExhaustiveLetPatternsError(bindingType, ctx))
             }
 
             val vars = getVariablesInfoFromPattern(binding.pattern(), bindingType)
             val duplicate = vars.map { it.first }.groupingBy { it }.eachCount().asIterable()
                 .firstOrNull { it.value > 1 }
-
             if (duplicate != null) {
                 errorPrinter.printError(DuplicatePatternVariableError(binding.pattern(), duplicate.key))
             }
@@ -640,8 +631,8 @@ class TypeCheckVisitor(
         }
         val expectedListType = ListType(headType)
         val tailType = context.runWithExpected(expectedListType) { ctx.tail.accept(this) }
-        if (expectedListType != tailType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(expectedListType, tailType, ctx))
+        if (tailType.isNotApplicable(expectedListType)) {
+            errorPrinter.printError(unexpectedTypeError(expectedListType, tailType, ctx))
         }
 
         return expectedListType
@@ -688,8 +679,8 @@ class TypeCheckVisitor(
             ctx.expr1.accept(this)
         }
 
-        if (leftType == UnitType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(UnitType, leftType, ctx.expr1))
+        if (leftType.isNotApplicable(UnitType)) {
+            errorPrinter.printError(unexpectedTypeError(UnitType, leftType, ctx.expr1))
         }
 
         return ctx.expr2.accept(this)
@@ -734,8 +725,8 @@ class TypeCheckVisitor(
 
         val rightType = context.runWithExpected(leftType.innerType) { ctx.rhs.accept(this) }
 
-        if (leftType.innerType != rightType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(leftType.innerType, rightType, ctx))
+        if (rightType.isNotApplicable(leftType.innerType)) {
+            errorPrinter.printError(unexpectedTypeError(leftType.innerType, rightType, ctx))
         }
 
         return UnitType
@@ -759,8 +750,8 @@ class TypeCheckVisitor(
             context.runWithExpected(tryType) { ctx.fallbackExpr.accept(this) }
         }
 
-        if (tryType != fallbackType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(tryType, fallbackType, ctx))
+        if (fallbackType.isNotApplicable(tryType)) {
+            errorPrinter.printError(unexpectedTypeError(tryType, fallbackType, ctx))
         }
 
         return tryType
@@ -771,8 +762,8 @@ class TypeCheckVisitor(
             ?: errorPrinter.printError(ExceptionTypeNotDeclaredError(ctx))
 
         val exprType = context.runWithExpected(declaredExceptionType) { ctx.expr().accept(this) }
-        if (declaredExceptionType != exprType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(declaredExceptionType, exprType, ctx))
+        if (exprType.isNotApplicable(declaredExceptionType)) {
+            errorPrinter.printError(unexpectedTypeError(declaredExceptionType, exprType, ctx))
         }
 
         return context.getExpectedType() ?: errorPrinter.printError(AmbiguousThrowTypeError(ctx))
@@ -782,11 +773,16 @@ class TypeCheckVisitor(
         val tryType = ctx.tryExpr.accept(this)
         val fallbackType = context.runWithExpected(tryType) { ctx.fallbackExpr.accept(this) }
 
-        if (tryType != fallbackType) {
-            errorPrinter.printError(UnexpectedTypeForExpressionError(tryType, fallbackType, ctx))
+        if (fallbackType.isNotApplicable(tryType)) {
+            errorPrinter.printError(unexpectedTypeError(tryType, fallbackType, ctx))
         }
 
         return tryType
+    }
+
+    override fun visitTypeCast(ctx: TypeCastContext): Type {
+        context.runWithExpected(null) { ctx.expr().accept(this) }
+        return ctx.stellatype().accept(this)
     }
 
     private fun getVariablesInfoFromPattern(pattern: PatternContext, type: Type): List<Pair<String, Type>> {
@@ -902,4 +898,18 @@ class TypeCheckVisitor(
             else -> throw IllegalStateException("Unexpected pattern context")
         }
     }
+
+    private fun unexpectedTypeError(expectedType: Type, actualType: Type, expression: ExprContext): CheckError =
+        if (context.extensions.contains(StellaExtensions.STRUCTURAL_SUBTYPRING)) {
+            UnexpectedSubtypeError(expectedType, actualType, expression)
+        } else {
+            UnexpectedTypeForExpressionError(expectedType, actualType, expression)
+        }
+
+    private fun Type.isApplicable(other: Type): Boolean {
+        val structuralSubtyping = context.extensions.contains(StellaExtensions.STRUCTURAL_SUBTYPRING)
+        return this.isApplicable(other, structuralSubtyping)
+    }
+
+    private fun Type.isNotApplicable(other: Type): Boolean = !this.isApplicable(other)
 }

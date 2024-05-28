@@ -9,11 +9,11 @@ data class UnexpectedFieldAccessError(val recordType: RecordType, val expression
         get() = "ERROR_UNEXPECTED_FIELD_ACCESS"
 
     override fun getDescription(parser: StellaParser): String = """
-    попытка извлечь отсутствующее поле записи
-      $label
-    для типа записи
-      $recordType
-    в выражении
-      ${expression.toStringTree(parser)}
+        попытка извлечь отсутствующее поле записи
+            $label
+        для типа записи
+            $recordType
+        в выражении
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

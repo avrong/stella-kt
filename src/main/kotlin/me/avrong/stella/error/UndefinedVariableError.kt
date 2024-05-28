@@ -8,8 +8,8 @@ data class UndefinedVariableError(val varName: String, val parentExpression: Rul
 
     override fun getDescription(parser: StellaParser): String = """
         в выражении
-          ${parentExpression.toStringTree(parser)}
+            ${parentExpression.toStringTree(parser)}
         содержится необъявленная переменная
-          $varName
+            $varName
     """.trimIndent()
 }

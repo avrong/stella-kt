@@ -8,8 +8,8 @@ data class UnexpectedNonNullaryVariantPatternError(val expr: StellaParser.Patter
 
     override fun getDescription(parser: StellaParser): String = """
         паттерн
-          ${expr.toStringTree(parser)}
+            ${expr.toStringTree(parser)}
         содержит тег с данными, хотя ожидается тег без
-          $type
+            $type
     """.trimIndent()
 }

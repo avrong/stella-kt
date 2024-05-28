@@ -7,8 +7,7 @@ data class AmbiguousVariantTypeError(val expression: StellaParser.ExprContext) :
 
     override fun getDescription(parser: StellaParser): String = """
         вариантный тип
-          ${expression.toStringTree(parser)}
-        невозможно определить 
-        в данном контексте отсутсвует ожидаемый вариантный тип
+            ${expression.toStringTree(parser)}
+        невозможно определить, в данном контексте отсутсвует ожидаемый вариантный тип
     """.trimIndent()
 }

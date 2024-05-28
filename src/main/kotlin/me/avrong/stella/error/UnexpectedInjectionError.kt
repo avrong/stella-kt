@@ -8,8 +8,8 @@ data class UnexpectedInjectionError(val expectedType: Type, val expression: Stel
 
     override fun getDescription(parser: StellaParser): String = """
         получена инъекция 
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
         но ожидается тип отличный от суммы
-          $expectedType
+            $expectedType
     """.trimIndent()
 }

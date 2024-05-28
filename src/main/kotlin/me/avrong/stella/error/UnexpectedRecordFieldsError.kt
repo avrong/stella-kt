@@ -14,11 +14,12 @@ data class UnexpectedRecordFieldsError(
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается тип
-          $expected
+            $expected
         но получен тип записи
-          $actual
-        в котором есть лишние поля ${fields.joinToString(", ") { "${it.first} : ${it.second}" }}
+            $actual
+        в котором есть лишние поля
+            ${fields.joinToString(", ") { "${it.first} : ${it.second}" }}
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

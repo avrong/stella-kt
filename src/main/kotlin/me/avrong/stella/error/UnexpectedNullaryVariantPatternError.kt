@@ -9,8 +9,8 @@ data class UnexpectedNullaryVariantPatternError(val expr: StellaParser.PatternCo
 
     override fun getDescription(parser: StellaParser): String = """
         паттерн
-           ${expr.toStringTree(parser)}
+            ${expr.toStringTree(parser)}
         содержит тег без данных, хотя ожидается тег с данными
-           $type
+            $type
     """.trimIndent()
 }

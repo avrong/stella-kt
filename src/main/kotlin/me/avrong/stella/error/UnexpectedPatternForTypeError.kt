@@ -8,8 +8,8 @@ data class UnexpectedPatternForTypeError(val type: Type?, val pattern: StellaPar
 
     override fun getDescription(parser: StellaParser): String = """
         образец
-           ${pattern.toStringTree(parser)}
+            ${pattern.toStringTree(parser)}
         не соответствует типу разбираемого выражения
-           $type
+            $type
     """.trimIndent()
 }

@@ -8,9 +8,8 @@ data class NotATupleError(val expression: StellaParser.ExprContext, val type: Ty
 
     override fun getDescription(parser: StellaParser): String = """
         для выражения
-          ${expression.toStringTree(parser)}
-        ожидается тип кортежа
-        но получен тип
-          $type
+            ${expression.toStringTree(parser)}
+        ожидается тип кортежа, но получен тип
+            $type
     """.trimIndent()
 }

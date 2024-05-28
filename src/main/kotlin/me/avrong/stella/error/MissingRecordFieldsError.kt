@@ -14,11 +14,12 @@ data class MissingRecordFieldsError(
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается тип
-          $expected
+            $expected
         но получен тип записи
-          $actual
-        в котором нет полей ${fields.joinToString(", ") { "${it.first} : ${it.second}" }}
+            $actual
+        в котором нет полей
+            ${fields.joinToString(", ") { "${it.first} : ${it.second}" }}
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

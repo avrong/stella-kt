@@ -8,8 +8,8 @@ data class MissingDataForLabelError(val expr: StellaParser.ExprContext, val type
 
     override fun getDescription(parser: StellaParser): String = """
         выражение
-          ${expr.toStringTree(parser)}
+            ${expr.toStringTree(parser)}
         не содержит даннные для метки, ожидается тег с данными
-          $type
+            $type
     """.trimIndent()
 }

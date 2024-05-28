@@ -8,9 +8,10 @@ data class UnexpectedTupleLengthError(val expected: TupleType, val expression: S
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается кортеж
-          $expected
-        с длинной ${expected.types.size}
+            $expected
+        с длинной
+            ${expected.types.size}
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

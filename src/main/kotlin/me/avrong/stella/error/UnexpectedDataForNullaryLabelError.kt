@@ -7,9 +7,9 @@ data class UnexpectedDataForNullaryLabelError(val expr: StellaParser.ExprContext
     override val name: String = "ERROR_UNEXPECTED_DATA_FOR_NULLARY_LABEL"
 
     override fun getDescription(parser: StellaParser): String = """
-    выражение
-       ${expr.toStringTree(parser)}
-    содержит даннные для метки, хотя ожидается тег без данных
-       $type
+        выражение
+            ${expr.toStringTree(parser)}
+        содержит даннные для метки, хотя ожидается тег без данных
+            $type
     """.trimIndent()
 }

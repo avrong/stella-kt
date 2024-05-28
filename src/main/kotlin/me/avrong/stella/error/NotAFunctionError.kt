@@ -8,9 +8,8 @@ data class NotAFunctionError(val expression: StellaParser.ExprContext, val type:
 
     override fun getDescription(parser: StellaParser): String = """
         для выражения
-          ${expression.toStringTree(parser)}
-        ожидается функциональный тип
-        но получен тип
-          $type
+            ${expression.toStringTree(parser)}
+        ожидается функциональный тип, но получен тип
+            $type
     """.trimIndent()
 }

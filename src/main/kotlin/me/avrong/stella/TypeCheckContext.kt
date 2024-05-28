@@ -5,7 +5,8 @@ import me.avrong.stella.type.Type
 data class TypeCheckContext(
     private val variableTypes: MutableMap<String, MutableList<Type>> = mutableMapOf(),
     private val expectedTypes: MutableList<Type?> = mutableListOf(),
-    var declaredExceptionsType: Type? = null
+    var declaredExceptionsType: Type? = null,
+    val extensions: MutableSet<String> = mutableSetOf()
 ) {
     fun getType(name: String): Type? = variableTypes[name]?.lastOrNull()
 

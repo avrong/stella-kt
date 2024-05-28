@@ -8,9 +8,9 @@ data class UnexpectedLambdaError(val expected: Type?, val expression: StellaPars
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается не функциональный тип
-          $expected
+            $expected
         но получен функциональный тип
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

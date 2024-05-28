@@ -7,8 +7,8 @@ data class TupleIndexOfBoundsError(val expression: StellaParser.ExprContext, val
 
     override fun getDescription(parser: StellaParser): String = """
         в выражении
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
         попытка извлечь отсутствующий компонент кортежа
-          ${index + 1}
+            ${index + 1}
     """.trimIndent()
 }

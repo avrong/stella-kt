@@ -8,9 +8,9 @@ data class UnexpectedTupleError(val expected: Type?, val expression: StellaParse
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается не тип кортежа
-          $expected
+            $expected
         но получен тип кортежа для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
        
     """.trimIndent()
 }

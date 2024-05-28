@@ -8,8 +8,8 @@ data class UnexpectedListError(val expected: Type?, val expression: StellaParser
 
     override fun getDescription(parser: StellaParser): String = """
         ожидается не тип списка
-          $expected
+            $expected
         для выражения
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
     """.trimIndent()
 }

@@ -7,7 +7,7 @@ data class IllegalEmptyMatchingError(val expression: StellaParser.ExprContext) :
 
     override fun getDescription(parser: StellaParser): String = """
         match выражение
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
         с пустым списком альтернатив
     """.trimIndent()
 }

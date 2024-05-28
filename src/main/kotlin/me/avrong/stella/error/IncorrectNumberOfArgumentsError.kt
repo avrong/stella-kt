@@ -8,7 +8,7 @@ data class IncorrectNumberOfArgumentsError(val actual: Int, val expected: Int, v
 
     override fun getDescription(parser: StellaParser): String = """
         вызов
-          ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
         происходит с $actual аргументами, хотя должен с $expected
     """.trimIndent()
 }

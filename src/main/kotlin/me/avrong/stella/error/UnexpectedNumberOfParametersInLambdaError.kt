@@ -8,7 +8,7 @@ data class UnexpectedNumberOfParametersInLambdaError(val expected: Int, val expr
 
     override fun getDescription(parser: StellaParser): String = """
         количество параметров анонимной функции
-           ${expression.toStringTree(parser)}
+            ${expression.toStringTree(parser)}
         не совпадает с ожидаемым количеством параметров $expected
     """.trimIndent()
 }
