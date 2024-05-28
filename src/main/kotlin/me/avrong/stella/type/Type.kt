@@ -18,6 +18,10 @@ abstract class Type {
         // Structural subtyping implementation
         fun Type.isApplicableStruct(other: Type): Boolean = isApplicable(other, true)
 
+        // Top & Bot
+        if (this == BotType) return true
+        if (other == TopType) return true
+
         if (this is FuncType && other is FuncType) {
             if (!returnType.isApplicable(other.returnType, structuralSubtyping)) return false
             if (argTypes.size != other.argTypes.size) return false

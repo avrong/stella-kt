@@ -45,8 +45,6 @@ class CheckOkTest {
         val resultMessage = "$all DONE: $ok OK, $wrong WRONG"
         println(resultMessage)
 
-        if (all != ok) {
-            assert(false) { resultMessage }
-        }
+        assert(all == ok) { resultMessage }
     }
 }

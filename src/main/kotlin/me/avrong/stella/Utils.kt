@@ -70,7 +70,7 @@ fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCh
 
         is ListType -> checkListTypeExhaustiveness(patterns, expressionType.contentType, typeCheckVisitor)
 
-        is FuncType, is RefType -> false
+        is FuncType, is RefType, is TopType, is BotType -> false
         else -> throw IllegalStateException("Unexpected expression type")
     }
 }

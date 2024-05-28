@@ -79,7 +79,7 @@ class TypeCheckVisitor(
 
     override fun visitIsZero(ctx: IsZeroContext): Type {
         val argType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (argType != NatType) errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
+        if (argType.isNotApplicable(NatType)) errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
         return BoolType
     }
 
@@ -197,7 +197,7 @@ class TypeCheckVisitor(
 
     override fun visitIf(ctx: IfContext): Type {
         val conditionType = context.runWithExpected(BoolType) { ctx.condition.accept(this) }
-        if (conditionType != BoolType) errorPrinter.printError(
+        if (conditionType.isNotApplicable(BoolType)) errorPrinter.printError(
             unexpectedTypeError(BoolType, conditionType, ctx)
         )
 
@@ -244,7 +244,7 @@ class TypeCheckVisitor(
 
     override fun visitSucc(ctx: SuccContext): Type {
         val argType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (argType != NatType) {
+        if (argType.isNotApplicable(NatType)) {
             errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
         }
 
@@ -469,7 +469,7 @@ class TypeCheckVisitor(
 
     override fun visitPred(ctx: PredContext): Type {
         val argType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (argType != NatType) errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
+        if (argType.isNotApplicable(NatType)) errorPrinter.printError(unexpectedTypeError(NatType, argType, ctx))
 
         return NatType
     }
@@ -487,7 +487,7 @@ class TypeCheckVisitor(
 
     override fun visitNatRec(ctx: NatRecContext): Type {
         val nType = context.runWithExpected(NatType) { ctx.n.accept(this) }
-        if (nType != NatType) errorPrinter.printError(unexpectedTypeError(NatType, nType, ctx))
+        if (nType.isNotApplicable(NatType)) errorPrinter.printError(unexpectedTypeError(NatType, nType, ctx))
 
         val zType = ctx.initial.accept(this)
         val expectedSType = FuncType(listOf(NatType), FuncType(listOf(zType), zType))
@@ -670,6 +670,8 @@ class TypeCheckVisitor(
     override fun visitTypeUnit(ctx: TypeUnitContext): Type = UnitType
     override fun visitTypeNat(ctx: TypeNatContext): Type = NatType
     override fun visitTypeRef(ctx: TypeRefContext): Type = RefType(ctx.stellatype().accept(this))
+    override fun visitTypeTop(ctx: TypeTopContext?): Type = TopType
+    override fun visitTypeBottom(ctx: TypeBottomContext?): Type = BotType
 
     override fun visitPanic(ctx: PanicContext): Type = context.getExpectedType() ?:
         errorPrinter.printError(AmbiguousPanicTypeError(ctx))
