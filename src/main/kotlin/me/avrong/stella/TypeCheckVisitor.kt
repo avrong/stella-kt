@@ -10,7 +10,6 @@ import me.avrong.stella.error.NotAReferenceError
 import me.avrong.stella.error.UnexpectedMemoryAddressError
 import me.avrong.stella.type.RefType
 import me.avrong.stella.type.*
-import kotlin.math.exp
 
 class TypeCheckVisitor(
     private val context: TypeCheckContext,
@@ -45,7 +44,7 @@ class TypeCheckVisitor(
     }
 
     override fun visitAnExtension(ctx: AnExtensionContext): Type {
-        val extensionNames = ctx.extensionNames.map { it.toString() }
+        val extensionNames = ctx.extensionNames.map { it.text }
         context.extensions.addAll(extensionNames)
 
         return UnitType
@@ -104,7 +103,13 @@ class TypeCheckVisitor(
         if (expectedType != null && expectedType !is ListType) errorPrinter.printError(
             UnexpectedListError(expectedType, ctx)
         )
-        if (ctx.exprs.isEmpty()) return expectedType ?: errorPrinter.printError(AmbiguousListError(ctx))
+        if (ctx.exprs.isEmpty()) {
+            return expectedType ?: if (context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
+                ListType(BotType)
+            } else {
+                errorPrinter.printError(AmbiguousListError(ctx))
+            }
+        }
 
         val firstElemType = context.runWithExpected((expectedType as? ListType)?.contentType) {
             ctx.exprs.first().accept(this)
@@ -252,25 +257,37 @@ class TypeCheckVisitor(
     }
 
     override fun visitInl(ctx: InlContext): Type {
-        val expectedType = context.getExpectedType() ?: errorPrinter.printError(AmbiguousSumTypeError(ctx))
-        if (expectedType !is SumType) {
+        val expectedType = context.getExpectedType()
+
+        if (expectedType == null && !context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
+            errorPrinter.printError(AmbiguousSumTypeError(ctx))
+        }
+        if (expectedType != null && expectedType !is SumType) {
             errorPrinter.printError(UnexpectedInjectionError(expectedType, ctx))
         }
 
-        val leftType = context.runWithExpected(expectedType.left) { ctx.expr().accept(this) }
+        val leftType = context.runWithExpected((expectedType as? SumType)?.left) {
+            ctx.expr().accept(this)
+        }
 
-        return SumType(leftType, expectedType.right)
+        return SumType(leftType, (expectedType as? SumType)?.right ?: BotType)
     }
 
     override fun visitInr(ctx: InrContext): Type {
-        val expectedType = context.getExpectedType() ?: errorPrinter.printError(AmbiguousSumTypeError(ctx))
-        if (expectedType !is SumType) {
+        val expectedType = context.getExpectedType()
+
+        if (expectedType == null && !context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
+            errorPrinter.printError(AmbiguousSumTypeError(ctx))
+        }
+        if (expectedType != null && expectedType !is SumType) {
             errorPrinter.printError(UnexpectedInjectionError(expectedType, ctx))
         }
 
-        val rightType = context.runWithExpected(expectedType.right) { ctx.expr().accept(this) }
+        val rightType = context.runWithExpected((expectedType as? SumType)?.right) {
+            ctx.expr().accept(this)
+        }
 
-        return SumType(expectedType.left, rightType)
+        return SumType((expectedType as? SumType)?.left ?: BotType, rightType)
     }
 
     override fun visitMatch(ctx: MatchContext): Type {
@@ -673,8 +690,12 @@ class TypeCheckVisitor(
     override fun visitTypeTop(ctx: TypeTopContext?): Type = TopType
     override fun visitTypeBottom(ctx: TypeBottomContext?): Type = BotType
 
-    override fun visitPanic(ctx: PanicContext): Type = context.getExpectedType() ?:
-        errorPrinter.printError(AmbiguousPanicTypeError(ctx))
+    override fun visitPanic(ctx: PanicContext): Type = context.getExpectedType()
+        ?: if (context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
+            BotType
+        } else {
+            errorPrinter.printError(AmbiguousPanicTypeError(ctx))
+        }
 
     override fun visitSequence(ctx: SequenceContext): Type {
         val leftType = context.runWithExpected(UnitType) {
@@ -768,7 +789,11 @@ class TypeCheckVisitor(
             errorPrinter.printError(unexpectedTypeError(declaredExceptionType, exprType, ctx))
         }
 
-        return context.getExpectedType() ?: errorPrinter.printError(AmbiguousThrowTypeError(ctx))
+        return context.getExpectedType() ?: if (context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
+            BotType
+        } else {
+            errorPrinter.printError(AmbiguousThrowTypeError(ctx))
+        }
     }
 
     override fun visitTryWith(ctx: TryWithContext): Type {
