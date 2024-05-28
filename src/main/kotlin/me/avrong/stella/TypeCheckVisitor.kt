@@ -100,7 +100,7 @@ class TypeCheckVisitor(
 
     override fun visitList(ctx: ListContext): Type {
         val expectedType = context.getExpectedType()
-        if (expectedType != null && expectedType !is ListType) errorPrinter.printError(
+        if (expectedType != null && expectedType !is ListType && expectedType !is TopType) errorPrinter.printError(
             UnexpectedListError(expectedType, ctx)
         )
         if (ctx.exprs.isEmpty()) {
@@ -142,7 +142,7 @@ class TypeCheckVisitor(
 
     override fun visitAbstraction(ctx: AbstractionContext): Type {
         val expectedType = context.getExpectedType()
-        if (expectedType != null && expectedType !is FuncType) {
+        if (expectedType != null && expectedType !is FuncType && expectedType !is TopType) {
             errorPrinter.printError(UnexpectedLambdaError(expectedType, ctx))
         }
         val expectedArgTypes = (expectedType as? FuncType)?.argTypes
@@ -159,7 +159,11 @@ class TypeCheckVisitor(
             val paramType = context.runWithExpected(expectedParamType) { params[i].stellatype().accept(this) }
 
             if (expectedParamType != null && paramType.isNotApplicable(expectedParamType)) {
-                errorPrinter.printError(UnexpectedTypeForParameterError(paramType, expectedParamType, ctx))
+                if (context.extensions.contains(StellaExtensions.STRUCTURAL_SUBTYPRING)) {
+                    errorPrinter.printError(UnexpectedSubtypeError(expectedParamType, paramType, ctx))
+                } else {
+                    errorPrinter.printError(UnexpectedTypeForParameterError(paramType, expectedParamType, ctx))
+                }
             }
 
             paramsInfo.add(Pair(name, paramType))
@@ -207,7 +211,7 @@ class TypeCheckVisitor(
         )
 
         val thenType = ctx.thenExpr.accept(this)
-        val elseType = ctx.elseExpr.accept(this)
+        val elseType = context.runWithExpected(thenType) { ctx.elseExpr.accept(this) }
 
         if (elseType.isNotApplicable(thenType)) {
             errorPrinter.printError(unexpectedTypeError(thenType, elseType, ctx))
@@ -262,7 +266,7 @@ class TypeCheckVisitor(
         if (expectedType == null && !context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
             errorPrinter.printError(AmbiguousSumTypeError(ctx))
         }
-        if (expectedType != null && expectedType !is SumType) {
+        if (expectedType != null && expectedType !is SumType && expectedType !is TopType) {
             errorPrinter.printError(UnexpectedInjectionError(expectedType, ctx))
         }
 
@@ -279,7 +283,7 @@ class TypeCheckVisitor(
         if (expectedType == null && !context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
             errorPrinter.printError(AmbiguousSumTypeError(ctx))
         }
-        if (expectedType != null && expectedType !is SumType) {
+        if (expectedType != null && expectedType !is SumType && expectedType !is TopType) {
             errorPrinter.printError(UnexpectedInjectionError(expectedType, ctx))
         }
 
@@ -424,6 +428,8 @@ class TypeCheckVisitor(
                 }
             }
 
+            is PatternCastAsContext -> getVariablesInfoFromPattern(pattern.pattern(), pattern.stellatype().accept(this))
+
             else -> throw IllegalStateException("Illegal state at pattern")
         }
     }
@@ -441,11 +447,8 @@ class TypeCheckVisitor(
 
     override fun visitRecord(ctx: RecordContext): Type {
         val expectedType = context.getExpectedType()
-        if (expectedType != null && expectedType !is RecordType) errorPrinter.printError(
-            UnexpectedRecordError(
-                expectedType,
-                ctx
-            )
+        if (expectedType != null && expectedType !is RecordType && expectedType !is TopType) errorPrinter.printError(
+            UnexpectedRecordError(expectedType, ctx)
         )
 
         val fields = mutableListOf<Pair<String, Type>>()
@@ -470,7 +473,7 @@ class TypeCheckVisitor(
                 )
             )
 
-            val missingFields = expectedType.fields.subtract(fields.toSet())
+            val missingFields = (expectedType.fields - fields.toSet()).map { it.first }.toSet()
             if (missingFields.isNotEmpty()) errorPrinter.printError(
                 MissingRecordFieldsError(
                     expectedType,
@@ -620,7 +623,7 @@ class TypeCheckVisitor(
 
     override fun visitTuple(ctx: TupleContext): Type {
         val expected = context.getExpectedType()
-        if (expected != null && expected !is TupleType) {
+        if (expected != null && expected !is TupleType && expected !is TopType) {
             errorPrinter.printError(UnexpectedTupleError(expected, ctx))
         }
 
@@ -639,7 +642,7 @@ class TypeCheckVisitor(
 
     override fun visitConsList(ctx: ConsListContext): Type {
         val expected = context.getExpectedType()
-        if (expected != null && expected !is ListType) {
+        if (expected != null && expected !is ListType && expected !is TopType) {
             errorPrinter.printError(UnexpectedListError(expected, ctx))
         }
 
@@ -713,7 +716,7 @@ class TypeCheckVisitor(
         val expectedType = context.getExpectedType() ?:
             errorPrinter.printError(AmbiguousReferenceTypeError(ctx))
 
-        if (expectedType !is RefType) {
+        if (expectedType !is RefType && expectedType !is TopType) {
             errorPrinter.printError(UnexpectedMemoryAddressError(ctx, expectedType))
         }
 
@@ -721,11 +724,16 @@ class TypeCheckVisitor(
     }
 
     override fun visitRef(ctx: RefContext): Type {
-        val nestedType = context.runWithExpected((context.getExpectedType() as? RefType)?.innerType) {
+        val expectedType = context.getExpectedType() as? RefType
+        val innerType = context.runWithExpected(expectedType?.innerType) {
             ctx.expr().accept(this)
         }
 
-        return RefType(nestedType)
+        if (expectedType != null && !innerType.isApplicable(expectedType.innerType)) {
+            unexpectedTypeError(expectedType.innerType, innerType, ctx)
+        }
+
+        return expectedType ?: RefType(innerType)
     }
 
     override fun visitDeref(ctx: DerefContext): Type {
@@ -810,6 +818,30 @@ class TypeCheckVisitor(
     override fun visitTypeCast(ctx: TypeCastContext): Type {
         context.runWithExpected(null) { ctx.expr().accept(this) }
         return ctx.stellatype().accept(this)
+    }
+
+    override fun visitDeclExceptionVariant(ctx: DeclExceptionVariantContext): Type {
+        val type = ctx.stellatype().accept(this)
+        val label = ctx.name.text
+
+        context.declaredExceptionsType =
+            VariantType(((context.declaredExceptionsType as? VariantType)?.variants ?: emptyList()) + (label to type))
+
+        return type
+    }
+
+    override fun visitTryCastAs(ctx: TryCastAsContext): Type {
+        context.runWithExpected(null) { ctx.tryExpr.accept(this) }
+        val variablesFromPattern = getVariablesInfoFromPattern(ctx.pattern(), ctx.type_.accept(this))
+
+        val bodyType = context.runWithTypes(variablesFromPattern) { ctx.expr_.accept(this) }
+        val fallbackType = context.runWithExpected(bodyType) { ctx.fallbackExpr.accept(this) }
+
+        if (!fallbackType.isApplicable(bodyType)) {
+            unexpectedTypeError(fallbackType, bodyType, ctx)
+        }
+
+        return bodyType
     }
 
     private fun getVariablesInfoFromPattern(pattern: PatternContext, type: Type): List<Pair<String, Type>> {
@@ -928,6 +960,46 @@ class TypeCheckVisitor(
 
     private fun unexpectedTypeError(expectedType: Type, actualType: Type, expression: ExprContext): CheckError =
         if (context.extensions.contains(StellaExtensions.STRUCTURAL_SUBTYPRING)) {
+            if (actualType is FuncType && expectedType is FuncType) {
+                if (actualType.argTypes.size != expectedType.argTypes.size) {
+                    IncorrectNumberOfArgumentsError(
+                        actualType.argTypes.size,
+                        expectedType.argTypes.size,
+                        expression
+                    )
+                }
+            } else if (expectedType is RecordType && actualType is RecordType) {
+                val thisFields = actualType.fields.toMap()
+                val expectedFields = expectedType.fields.toMap()
+                if ((expectedFields - thisFields.keys).isNotEmpty()) {
+                    MissingRecordFieldsError(
+                        expectedType,
+                        actualType,
+                        expression,
+                        (expectedFields - thisFields.keys).map { it.key }.toSet()
+                    )
+                }
+            } else if (actualType is TupleType && expectedType is TupleType) {
+                if (actualType.types.size != expectedType.types.size)  {
+                    UnexpectedTupleLengthError(expectedType, expression)
+                }
+            } else if (actualType is VariantType && expectedType is VariantType) {
+                val thisVariants = actualType.variants.toMap()
+                val expectedVariants = expectedType.variants.toMap()
+
+                if ((thisVariants - expectedVariants.keys).isNotEmpty()) {
+                    UnexpectedVariantLabelError(
+                        (thisVariants - expectedVariants.keys).keys.first(),
+                        expectedType, expression
+                    )
+                } else if (!thisVariants.keys.all { expectedVariants.containsKey(it) }) {
+                    UnexpectedVariantLabelError(
+                        thisVariants.keys.first { !expectedVariants.containsKey(it) },
+                        expectedType, expression
+                    )
+                }
+            }
+
             UnexpectedSubtypeError(expectedType, actualType, expression)
         } else {
             UnexpectedTypeForExpressionError(expectedType, actualType, expression)

@@ -79,12 +79,24 @@ fun unwrapPattern(pattern: PatternContext, typeCheckVisitor: TypeCheckVisitor): 
     var resultPattern = pattern
     var type : Type? = null
 
-    while (resultPattern is ParenthesisedPatternContext || resultPattern is PatternAscContext) {
-        if (resultPattern is ParenthesisedPatternContext) {
-            resultPattern = resultPattern.pattern()
-        } else if (resultPattern is PatternAscContext) {
-            type = resultPattern.stellatype().accept(typeCheckVisitor)
-            resultPattern = resultPattern.pattern()
+    while (
+        resultPattern is ParenthesisedPatternContext
+        || resultPattern is PatternAscContext
+        || resultPattern is PatternCastAsContext
+    ) {
+        when (resultPattern) {
+            is ParenthesisedPatternContext -> {
+                resultPattern = resultPattern.pattern()
+            }
+
+            is PatternAscContext -> {
+                type = resultPattern.stellatype().accept(typeCheckVisitor)
+                resultPattern = resultPattern.pattern()
+            }
+
+            is PatternCastAsContext -> {
+                resultPattern = resultPattern.pattern()
+            }
         }
     }
 

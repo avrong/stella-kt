@@ -8,7 +8,7 @@ data class MissingRecordFieldsError(
     val expected: Type?,
     val actual: RecordType,
     val expression: StellaParser.ExprContext,
-    val fields: Set<Pair<String, Type>>
+    val fields: Set<String>
 ) : CheckError {
     override val name: String = "ERROR_MISSING_RECORD_FIELDS"
 
@@ -18,7 +18,7 @@ data class MissingRecordFieldsError(
         но получен тип записи
             $actual
         в котором нет полей
-            ${fields.joinToString(", ") { "${it.first} : ${it.second}" }}
+            ${fields.joinToString(", ") }
         для выражения
             ${expression.toStringTree(parser)}
     """.trimIndent()
