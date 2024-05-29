@@ -107,7 +107,7 @@ class TypeCheckVisitor(
             return expectedType ?: if (context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
                 ListType(BotType)
             } else {
-                errorPrinter.printError(AmbiguousListError(ctx))
+                errorPrinter.printError(AmbiguousListTypeError(ctx))
             }
         }
 
