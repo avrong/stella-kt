@@ -857,13 +857,25 @@ class TypeCheckVisitor(
     }
 
     override fun visitRef(ctx: RefContext): Type {
-        val expectedType = context.getExpectedType() as? RefType
-        val innerType = context.runWithExpected(expectedType?.innerType) {
+        val expectedType = context.getExpectedType()
+
+        if (
+            expectedType != null
+            && expectedType !is RefType
+            && expectedType !is TopType
+            && expectedType !is UniversalTypeVariable
+        ) {
+            errorPrinter.printError(UnexpectedReferenceError(expectedType, ctx.expr()))
+        }
+
+        val expectedRefType = expectedType as? RefType
+
+        val innerType = context.runWithExpected(expectedRefType?.innerType) {
             ctx.expr().accept(this)
         }
 
-        if (expectedType != null && !innerType.isApplicable(expectedType.innerType)) {
-            unexpectedTypeError(expectedType.innerType, innerType, ctx)
+        if (expectedRefType != null && !innerType.isApplicable(expectedRefType.innerType)) {
+            unexpectedTypeError(expectedRefType.innerType, innerType, ctx)
         }
 
         return expectedType ?: RefType(innerType)
