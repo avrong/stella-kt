@@ -567,8 +567,30 @@ class TypeCheckVisitor(
 
         val actualType = RecordType(fields)
 
+        if (context.extensions.contains(StellaExtensions.STRUCTURAL_SUBTYPRING) && expectedType != null) {
+            if (actualType.isApplicable(expectedType)) {
+                return actualType
+            } else {
+                if (expectedType is RecordType) {
+                    val unexpectedFields = fields.map { it.first }.subtract(expectedType.fields.map { it.first }.toSet())
+                    if (unexpectedFields.isNotEmpty()) {
+                        errorPrinter.printError(UnexpectedRecordFieldsError(expectedType, actualType, ctx, unexpectedFields))
+                    }
+
+                    val missingFields = expectedType.fields.map { it.first }.subtract(fields.map { it.first }.toSet())
+                    if (missingFields.isNotEmpty()) {
+                        errorPrinter.printError(MissingRecordFieldsError(expectedType, actualType, ctx, missingFields))
+                    }
+                }
+
+                errorPrinter.printError(unexpectedTypeError(expectedType, actualType, ctx))
+
+            }
+        }
+
+
         if ((expectedType as? RecordType)?.fields != null) {
-            val unexpectedFields = fields.subtract(expectedType.fields.toSet())
+            val unexpectedFields = (fields - expectedType.fields).map { it.first }.toSet()
             if (unexpectedFields.isNotEmpty()) errorPrinter.printError(
                 UnexpectedRecordFieldsError(
                     expectedType,
