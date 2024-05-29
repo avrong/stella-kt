@@ -1,12 +1,17 @@
-package me.avrong.stella
+package me.avrong.stella.context
 
+import me.avrong.stella.solver.Constraint
 import me.avrong.stella.type.Type
+import me.avrong.stella.type.UniversalTypeVariable
 
 data class TypeCheckContext(
     private val variableTypes: MutableMap<String, MutableList<Type>> = mutableMapOf(),
     private val expectedTypes: MutableList<Type?> = mutableListOf(),
     var declaredExceptionsType: Type? = null,
-    val extensions: MutableSet<String> = mutableSetOf()
+    val extensions: MutableSet<String> = mutableSetOf(),
+    val constraints: MutableList<Constraint> = mutableListOf(),
+    var typeVariablesNum: Int = 0,
+    val generics: MutableList<List<UniversalTypeVariable>> = mutableListOf()
 ) {
     fun getType(name: String): Type? = variableTypes[name]?.lastOrNull()
 
@@ -50,4 +55,18 @@ data class TypeCheckContext(
         }
     }
 
+    fun <T> runWithGenerics(typeVars: List<UniversalTypeVariable>, action: () -> T): T {
+        generics.add(typeVars)
+        try {
+            return action()
+        } finally {
+            generics.removeLast()
+        }
+    }
+
+    fun getGeneric(name: String): UniversalTypeVariable? {
+        return generics.asReversed()
+            .firstOrNull { it.any { v -> v.name == name } }
+            ?.first { it.name == name }
+    }
 }

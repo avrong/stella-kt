@@ -2,6 +2,7 @@ package me.avrong.stella
 
 import StellaLexer
 import StellaParser
+import me.avrong.stella.context.TypeCheckContext
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
 import java.util.*

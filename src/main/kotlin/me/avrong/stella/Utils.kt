@@ -1,12 +1,31 @@
 package me.avrong.stella
 
 import StellaParser.*
+import me.avrong.stella.solver.Constraint
+import me.avrong.stella.solver.solveConstraints
 import me.avrong.stella.type.*
 
-fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCheckVisitor: TypeCheckVisitor): Boolean {
+fun isExhaustive(
+    patternList: List<PatternContext>,
+    expressionType: Type,
+    typeCheckVisitor: TypeCheckVisitor,
+    constraints: List<Constraint>
+): Boolean {
     val patterns = patternList.map { unwrapPattern(it, typeCheckVisitor).first }
 
     if (patterns.any { it is PatternVarContext }) return true
+
+    // TODO: Rewrite
+    var expressionType = expressionType
+    if (expressionType is TypeVariable) {
+        try {
+            val subst = solveConstraints(constraints)
+            val firstSubst = subst.firstOrNull { it.first == expressionType }
+            if (firstSubst != null) {
+                expressionType = firstSubst.second
+            }
+        } catch (e: Exception) {}
+    }
 
     return when (expressionType) {
         BoolType ->
@@ -24,7 +43,7 @@ fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCh
                 .filter { it.patterns.size == expressionType.types.size }
 
             expressionType.types.withIndex().all {
-                isExhaustive(tuplePatterns.map { p -> p.patterns[it.index] }, it.value, typeCheckVisitor)
+                isExhaustive(tuplePatterns.map { p -> p.patterns[it.index] }, it.value, typeCheckVisitor, constraints)
             }
         }
 
@@ -37,7 +56,7 @@ fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCh
                     .filter { it.size == expressionType.fields.size && it.any { lp -> lp.label.text == field.first } }
                     .map { it.first { lp -> lp.label.text == field.first }.pattern() }
 
-                isExhaustive(labelPatterns, field.second, typeCheckVisitor)
+                isExhaustive(labelPatterns, field.second, typeCheckVisitor, constraints)
             }
         }
 
@@ -47,8 +66,8 @@ fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCh
             val inrs = patterns.filterIsInstance<PatternInrContext>()
                 .map { it.pattern() }
 
-            return isExhaustive(inls, expressionType.left, typeCheckVisitor)
-                    && isExhaustive(inrs, expressionType.right, typeCheckVisitor)
+            return isExhaustive(inls, expressionType.left, typeCheckVisitor, constraints)
+                    && isExhaustive(inrs, expressionType.right, typeCheckVisitor, constraints)
         }
 
         is VariantType -> {
@@ -60,7 +79,8 @@ fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCh
                     isExhaustive(
                         variantPatterns.filter { p -> p.label.text == it.first }.mapNotNull { p -> p.pattern() },
                         varType,
-                        typeCheckVisitor
+                        typeCheckVisitor,
+                        constraints
                     )
                 } else {
                     variantPatterns.any { p -> p.label.text == it.first }
@@ -68,9 +88,11 @@ fun isExhaustive(patternList: List<PatternContext>, expressionType: Type, typeCh
             }
         }
 
-        is ListType -> checkListTypeExhaustiveness(patterns, expressionType.contentType, typeCheckVisitor)
+        is ListType -> checkListTypeExhaustiveness(patterns, expressionType.contentType, typeCheckVisitor, constraints)
 
         is FuncType, is RefType, is TopType, is BotType -> false
+        is TypeVariable, is UniversalTypeVariable, is UniversalType -> true
+
         else -> throw IllegalStateException("Unexpected expression type")
     }
 }
@@ -134,7 +156,12 @@ private fun checkNatExhaustiveness(patterns: List<PatternContext>): Boolean {
     return (0..<leftmostSucc).all { anotherNumbers.contains(it) }
 }
 
-private fun checkListTypeExhaustiveness(patterns: List<PatternContext>, contentType: Type, typeCheckVisitor: TypeCheckVisitor): Boolean {
+private fun checkListTypeExhaustiveness(
+    patterns: List<PatternContext>,
+    contentType: Type,
+    typeCheckVisitor: TypeCheckVisitor,
+    constraints: List<Constraint>
+): Boolean {
     data class ListPatternInfo(val nestedPatterns: List<PatternContext>, val size: Int, val hasVarAtEnd: Boolean)
 
     fun getPatternInfo(ctx: PatternContext): ListPatternInfo {
@@ -174,7 +201,7 @@ private fun checkListTypeExhaustiveness(patterns: List<PatternContext>, contentT
     for (i in 1..smallestSizeWithVarAtEnd) {
         val patternsWithSize = patternsInfo.filter { it.size == i }
         for (j in 0..<i) {
-            if (!isExhaustive(patternsWithSize.map { it.nestedPatterns[j] }, contentType, typeCheckVisitor)) {
+            if (!isExhaustive(patternsWithSize.map { it.nestedPatterns[j] }, contentType, typeCheckVisitor, constraints)) {
                 return false
             }
         }

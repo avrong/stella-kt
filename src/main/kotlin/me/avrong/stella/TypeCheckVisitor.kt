@@ -1,15 +1,18 @@
 package me.avrong.stella
 
-import StellaExtensions
+import me.avrong.stella.context.StellaExtensions
 import StellaParser.*
 import StellaParserBaseVisitor
+import me.avrong.stella.context.TypeCheckContext
 import me.avrong.stella.error.*
 import me.avrong.stella.error.AmbiguousPanicTypeError
 import me.avrong.stella.error.AmbiguousReferenceTypeError
 import me.avrong.stella.error.NotAReferenceError
 import me.avrong.stella.error.UnexpectedMemoryAddressError
+import me.avrong.stella.solver.Constraint
 import me.avrong.stella.type.RefType
 import me.avrong.stella.type.*
+import me.avrong.stella.type.BoolType.substitute
 
 class TypeCheckVisitor(
     private val context: TypeCheckContext,
@@ -100,9 +103,17 @@ class TypeCheckVisitor(
 
     override fun visitList(ctx: ListContext): Type {
         val expectedType = context.getExpectedType()
-        if (expectedType != null && expectedType !is ListType && expectedType !is TopType) errorPrinter.printError(
-            UnexpectedListError(expectedType, ctx)
-        )
+
+        if (
+            expectedType != null
+            && expectedType !is ListType
+            && expectedType !is TopType
+            && !context.isTypeReconstructionEnabled()
+            && expectedType !is UniversalTypeVariable
+        ) {
+            errorPrinter.printError(UnexpectedListError(expectedType, ctx))
+        }
+
         if (ctx.exprs.isEmpty()) {
             return expectedType ?: if (context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
                 ListType(BotType)
@@ -142,7 +153,13 @@ class TypeCheckVisitor(
 
     override fun visitAbstraction(ctx: AbstractionContext): Type {
         val expectedType = context.getExpectedType()
-        if (expectedType != null && expectedType !is FuncType && expectedType !is TopType) {
+        if (
+            expectedType != null
+            && expectedType !is FuncType
+            && expectedType !is TopType
+            && !context.isTypeReconstructionEnabled()
+            && expectedType !is UniversalTypeVariable
+        ) {
             errorPrinter.printError(UnexpectedLambdaError(expectedType, ctx))
         }
         val expectedArgTypes = (expectedType as? FuncType)?.argTypes
@@ -266,7 +283,14 @@ class TypeCheckVisitor(
         if (expectedType == null && !context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
             errorPrinter.printError(AmbiguousSumTypeError(ctx))
         }
-        if (expectedType != null && expectedType !is SumType && expectedType !is TopType) {
+
+        if (
+            expectedType != null
+            && expectedType !is SumType
+            && expectedType !is TopType
+            && !context.isTypeReconstructionEnabled()
+            && expectedType !is UniversalTypeVariable
+        ) {
             errorPrinter.printError(UnexpectedInjectionError(expectedType, ctx))
         }
 
@@ -283,7 +307,14 @@ class TypeCheckVisitor(
         if (expectedType == null && !context.extensions.contains(StellaExtensions.AMBIGUOUS_TYPE_AS_BOTTOM)) {
             errorPrinter.printError(AmbiguousSumTypeError(ctx))
         }
-        if (expectedType != null && expectedType !is SumType && expectedType !is TopType) {
+
+        if (
+            expectedType != null
+            && expectedType !is SumType
+            && expectedType !is TopType
+            && !context.isTypeReconstructionEnabled()
+            && expectedType !is UniversalTypeVariable
+        ) {
             errorPrinter.printError(UnexpectedInjectionError(expectedType, ctx))
         }
 
@@ -301,7 +332,12 @@ class TypeCheckVisitor(
             errorPrinter.printError(IllegalEmptyMatchingError(ctx))
         }
 
-        val isExhaustive = isExhaustive(cases.map { it.pattern() }, expressionType, this)
+        val isExhaustive = isExhaustive(
+            cases.map { it.pattern() },
+            expressionType,
+            this,
+            context.constraints
+        )
 
         val casesType = processMatchCase(cases.first(), expressionType)
 
@@ -334,97 +370,160 @@ class TypeCheckVisitor(
         return when (pattern) {
             is PatternVarContext -> listOf(Pair(pattern.name.text, type))
             is ParenthesisedPatternContext -> getVariablesTypesFromPattern(pattern.pattern(), type)
+
             is PatternFalseContext -> {
-                if (type != BoolType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                if (type != BoolType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
                 listOf()
             }
 
             is PatternTrueContext -> {
-                if (type != BoolType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                if (type != BoolType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
                 listOf()
             }
 
             is PatternUnitContext -> {
-                if (type != UnitType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                if (type != UnitType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
                 listOf()
             }
 
             is PatternInlContext -> {
-                if (type !is SumType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
-                getVariablesTypesFromPattern(pattern.pattern(), type.left)
+                if (type !is SumType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+
+                if (type is SumType) {
+                    getVariablesInfoFromPattern(pattern.pattern(), type.left)
+                } else {
+                   getVariablesInfoFromPattern(pattern.pattern(), TypeVariable(++context.typeVariablesNum))
+                }
             }
 
             is PatternInrContext -> {
-                if (type !is SumType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
-                getVariablesTypesFromPattern(pattern.pattern(), type.right)
+                if (type !is SumType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+
+                if (type is SumType) {
+                    getVariablesInfoFromPattern(pattern.pattern(), type.right)
+                } else {
+                    getVariablesInfoFromPattern(pattern.pattern(), TypeVariable(++context.typeVariablesNum))
+                }
             }
 
             is PatternIntContext -> {
-                if (type != NatType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                if (type != NatType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
                 listOf()
             }
 
             is PatternSuccContext -> {
-                if (type != NatType) errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
-                getVariablesTypesFromPattern(pattern.pattern(), type)
+                if (type != NatType && type !is TypeVariable) {
+                    errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
+                }
+                getVariablesTypesFromPattern(pattern.pattern(), NatType)
             }
 
             is PatternRecordContext -> {
-                if (type !is RecordType || pattern.patterns.map { it.label.text }.toSet() !=
-                    type.fields.map { it.first }.toSet()
+                if ((type !is RecordType
+                        || pattern.patterns.map { it.label.text }.toSet() != type.fields.map { it.first }.toSet()
+                    ) && type !is TypeVariable
                 ) {
                     errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
                 }
-                buildList {
-                    pattern.patterns.forEach {
-                        addAll(getVariablesTypesFromPattern(it.pattern(),
-                            type.fields.first { f -> f.first == it.label.text }.second
-                        )
-                        )
+
+                if (type is RecordType) {
+                    buildList {
+                        pattern.patterns.forEach {
+                            addAll(getVariablesTypesFromPattern(it.pattern(),
+                                type.fields.first { f -> f.first == it.label.text }.second
+                            ))
+                        }
+                    }
+                } else {
+                    buildList {
+                        pattern.patterns.forEach {
+                            addAll(getVariablesInfoFromPattern(it.pattern(), TypeVariable(++context.typeVariablesNum)))
+                        }
                     }
                 }
             }
 
             is PatternTupleContext -> {
-                if (type !is TupleType || type.types.size != pattern.patterns.size) {
+                if ((type !is TupleType || type.types.size != pattern.patterns.size) && type !is TypeVariable) {
                     errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
                 }
 
-                pattern.patterns.withIndex().flatMap {
-                    getVariablesTypesFromPattern(it.value, type.types[it.index])
+                if (type is TupleType) {
+                    pattern.patterns.withIndex().flatMap {
+                        getVariablesInfoFromPattern(it.value, type.types[it.index])
+                    }
+                } else {
+                    pattern.patterns.withIndex().flatMap {
+                        getVariablesInfoFromPattern(it.value, TypeVariable(++context.typeVariablesNum))
+                    }
                 }
             }
 
             is PatternVariantContext -> {
-                if (type !is VariantType || !type.variants.any { it.first == pattern.label.text }) {
+                if (
+                    (type !is VariantType || !type.variants.any { it.first == pattern.label.text })
+                    && type !is TypeVariable
+                ) {
                     errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
                 }
-                val labelType = type.variants.first { it.first == pattern.label.text }.second
-                if (labelType != null && pattern.pattern() == null) {
-                    errorPrinter.printError(UnexpectedNullaryVariantPatternError(pattern, type))
+
+                if (type is VariantType) {
+                    val labelType = type.variants.first { it.first == pattern.label.text }.second
+
+                    if (labelType != null && pattern.pattern() == null) {
+                        errorPrinter.printError(UnexpectedNullaryVariantPatternError(pattern, type))
+                    }
+
+                    if (labelType == null && pattern.pattern() != null) {
+                        errorPrinter.printError(UnexpectedNonNullaryVariantPatternError(pattern, type))
+                    }
+
+                    labelType?.let {
+                        getVariablesInfoFromPattern(pattern.pattern(), it)
+                    } ?: listOf()
+                } else {
+                    getVariablesInfoFromPattern(pattern.pattern(), TypeVariable(++context.typeVariablesNum))
                 }
-                if (labelType == null && pattern.pattern() != null) {
-                    errorPrinter.printError(UnexpectedNonNullaryVariantPatternError(pattern, type))
-                }
-                labelType?.let {
-                    getVariablesTypesFromPattern(pattern.pattern(), it)
-                } ?: listOf()
             }
 
             is PatternListContext -> {
-                if (type !is ListType) {
+                if (type !is ListType && type !is TypeVariable) {
                     errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
                 }
-                pattern.patterns.flatMap { getVariablesTypesFromPattern(it, type.contentType) }
+
+                if (type is ListType) {
+                    pattern.patterns.flatMap { getVariablesInfoFromPattern(it, type.contentType) }
+                } else {
+                    pattern.patterns.flatMap { getVariablesInfoFromPattern(it, TypeVariable(++context.typeVariablesNum)) }
+                }
             }
 
             is PatternConsContext -> {
-                if (type !is ListType) {
+                if (type !is ListType && type !is TypeVariable) {
                     errorPrinter.printError(UnexpectedPatternForTypeError(type, pattern))
                 }
-                buildList {
-                    addAll(getVariablesTypesFromPattern(pattern.head, type.contentType))
-                    addAll(getVariablesTypesFromPattern(pattern.tail, type))
+
+                if (type is ListType) {
+                    buildList {
+                        addAll(getVariablesInfoFromPattern(pattern.head, type.contentType))
+                        addAll(getVariablesInfoFromPattern(pattern.tail, type))
+                    }
+                } else {
+                    buildList {
+                        addAll(getVariablesInfoFromPattern(pattern.head, TypeVariable(++context.typeVariablesNum)))
+                    }
                 }
             }
 
@@ -447,14 +546,20 @@ class TypeCheckVisitor(
 
     override fun visitRecord(ctx: RecordContext): Type {
         val expectedType = context.getExpectedType()
-        if (expectedType != null && expectedType !is RecordType && expectedType !is TopType) errorPrinter.printError(
-            UnexpectedRecordError(expectedType, ctx)
-        )
+        if (
+            expectedType != null
+            && expectedType !is RecordType
+            && expectedType !is TopType
+            && expectedType !is UniversalTypeVariable
+        ) {
+            errorPrinter.printError(UnexpectedRecordError(expectedType, ctx))
+        }
 
         val fields = mutableListOf<Pair<String, Type>>()
         for (binding in ctx.bindings) {
-            val type =
-                (expectedType as? RecordType)?.fields?.firstOrNull { it.first == binding.name.text }?.second
+            val type = (expectedType as? RecordType)?.fields
+                ?.firstOrNull { it.first == binding.name.text }?.second
+
             fields.add(Pair(binding.name.text, context.runWithExpected(type) {
                 binding.rhs.accept(this)
             }))
@@ -521,26 +626,42 @@ class TypeCheckVisitor(
 
     override fun visitDotTuple(ctx: DotTupleContext): Type {
         val tupleType = context.runWithExpected(null) { ctx.expr().accept(this) }
-        if (tupleType !is TupleType) {
+        if (tupleType !is TupleType && !context.isTypeReconstructionEnabled()) {
             errorPrinter.printError(NotATupleError(ctx, tupleType))
         }
 
         val index = ctx.index.text.toInt() - 1
-        if (tupleType.types.size <= index) {
+        if (tupleType is TupleType && tupleType.types.size <= index || tupleType is TypeVariable && index >= 3) {
             errorPrinter.printError(TupleIndexOfBoundsError(ctx, index))
         }
 
-        return tupleType.types[ctx.index.text.toInt() - 1]
+        return if (tupleType is TupleType) {
+            tupleType.types[ctx.index.text.toInt() - 1]
+        } else {
+            TypeVariable(++context.typeVariablesNum).also {
+                context.constraints.add(
+                    Constraint(
+                        tupleType, TupleType(
+                            if (index == 1)
+                                listOf(it, TypeVariable(++context.typeVariablesNum)) else
+                                listOf(TypeVariable(++context.typeVariablesNum), it)
+                        ), ctx
+                    )
+                )
+            }
+        }
     }
 
     override fun visitFix(ctx: FixContext): Type {
         val expressionExpectedType = context.getExpectedType()?.let { FuncType(listOf(it), it) }
         val expressionType = context.runWithExpected(expressionExpectedType) { ctx.expr().accept(this) }
-        if (expressionType !is FuncType || expressionType.argTypes.size != 1) {
+        if ((expressionType !is FuncType || expressionType.argTypes.size != 1) && !context.isTypeReconstructionEnabled()) {
             errorPrinter.printError(NotAFunctionError(ctx.expr(), expressionType))
         }
 
-        val expectedType = FuncType(expressionType.argTypes, expressionType.argTypes.first())
+        val expectedType = if (expressionType is FuncType) FuncType(expressionType.argTypes, expressionType.argTypes.first())
+            else TypeVariable(++context.typeVariablesNum).let { FuncType(listOf(it), it) }
+
         if (expressionType.isNotApplicable(expectedType)) {
             errorPrinter.printError(unexpectedTypeError(expectedType, expressionType, ctx))
         }
@@ -578,7 +699,7 @@ class TypeCheckVisitor(
                 errorPrinter.printError(UnexpectedPatternForTypeError(bindingType, pattern))
             }
 
-            if (!isExhaustive(listOf(binding.pattern()), bindingType, this)) {
+            if (!isExhaustive(listOf(binding.pattern()), bindingType, this, context.constraints)) {
                 errorPrinter.printError(NonExhaustiveLetPatternsError(bindingType, ctx))
             }
         }
@@ -602,7 +723,7 @@ class TypeCheckVisitor(
                 errorPrinter.printError(UnexpectedPatternForTypeError(expectedPatternType, pattern))
             }
 
-            if (!isExhaustive(listOf(binding.pattern()), bindingType, this)) {
+            if (!isExhaustive(listOf(binding.pattern()), bindingType, this, context.constraints)) {
                 errorPrinter.printError(NonExhaustiveLetPatternsError(bindingType, ctx))
             }
 
@@ -623,7 +744,13 @@ class TypeCheckVisitor(
 
     override fun visitTuple(ctx: TupleContext): Type {
         val expected = context.getExpectedType()
-        if (expected != null && expected !is TupleType && expected !is TopType) {
+        if (
+            expected != null
+            && expected !is TupleType
+            && expected !is TopType
+            && !context.isTypeReconstructionEnabled()
+            && expected !is UniversalTypeVariable
+        ) {
             errorPrinter.printError(UnexpectedTupleError(expected, ctx))
         }
 
@@ -642,7 +769,13 @@ class TypeCheckVisitor(
 
     override fun visitConsList(ctx: ConsListContext): Type {
         val expected = context.getExpectedType()
-        if (expected != null && expected !is ListType && expected !is TopType) {
+        if (
+            expected != null
+            && expected !is ListType
+            && expected !is TopType
+            && context.isTypeReconstructionEnabled()
+            && expected !is UniversalTypeVariable
+        ) {
             errorPrinter.printError(UnexpectedListError(expected, ctx))
         }
 
@@ -844,6 +977,86 @@ class TypeCheckVisitor(
         return bodyType
     }
 
+    override fun visitDeclFunGeneric(ctx: DeclFunGenericContext): Type {
+        val typeParams = ctx.generics.map { UniversalTypeVariable(it.text) }
+        val params = ctx.paramDecls
+        val paramsInfo = context.runWithGenerics(typeParams) {
+            params.map { Pair(it.name.text, it.paramType.accept(this)) }
+        }
+        val returnType = context.runWithGenerics(typeParams) { ctx.returnType.accept(this) }
+        var funcType: Type = FuncType(paramsInfo.map { it.second }, returnType)
+        if (typeParams.isNotEmpty()) {
+            funcType = UniversalType(typeParams, funcType)
+        }
+
+        return context.runWithTypes(paramsInfo.plus(Pair(ctx.name.text, funcType))) {
+            val nestedFunctions = ctx.localDecls.filterIsInstance<DeclFunContext>().map {
+                Pair(it.name.text, it.accept(this))
+            }
+            context.runWithTypes(nestedFunctions) {
+                context.runWithExpected(returnType) {
+                    context.runWithGenerics(typeParams) {
+                        val returnExpressionType = ctx.returnExpr.accept(this)
+
+                        if (!returnExpressionType.isApplicable(returnType)) {
+                            unexpectedTypeError(returnType, returnExpressionType, ctx.returnExpr)
+                        }
+
+                        funcType
+                    }
+                }
+            }
+        }
+    }
+
+    override fun visitTypeAbstraction(ctx: TypeAbstractionContext): Type {
+        val generics = ctx.generics.map { UniversalTypeVariable(it.text) }
+
+        var expectedType: Type? = context.getExpectedType() as? UniversalType
+        if (expectedType is UniversalType && expectedType.variables.size == generics.size) {
+            expectedType = expectedType.nestedType.substitute(
+                expectedType.variables.mapIndexed { index, typeVar -> Pair(typeVar, generics[index]) }.toMap()
+            )
+        }
+
+        val nestedType = context.runWithExpected(expectedType) {
+            context.runWithGenerics(generics) { ctx.expr().accept(this) }
+        }
+        return UniversalType(generics, nestedType)
+    }
+
+    override fun visitTypeApplication(ctx: TypeApplicationContext): Type {
+        val funType = ctx.`fun`.accept(this)
+        if (funType !is UniversalType) {
+            errorPrinter.printError(NotAGenericFunctionError(ctx))
+        }
+        if (ctx.types.size != funType.variables.size) {
+            errorPrinter.printError(
+                IncorrectNumberOfTypeArgumentsError(ctx.types.size, funType.variables.size, ctx)
+            )
+        }
+
+        val typeArgs = ctx.types.map { it.accept(this) }
+        val typesMapping = funType.variables
+            .mapIndexed { index, typeVar -> Pair(typeVar, typeArgs[index]) }.toMap()
+
+        return funType.substitute(typesMapping)
+    }
+
+    override fun visitTypeVar(ctx: TypeVarContext): Type {
+        return context.getGeneric(ctx.name.text) ?: run {
+            errorPrinter.printError(UndefinedTypeVariableError(ctx.name.text))
+        }
+    }
+
+    override fun visitTypeAuto(ctx: TypeAutoContext?): Type =
+        TypeVariable(++context.typeVariablesNum)
+
+    override fun visitTypeForAll(ctx: TypeForAllContext): Type {
+        val typeArgs = ctx.types.map { UniversalTypeVariable(it.text) }
+        return UniversalType(typeArgs, context.runWithGenerics(typeArgs) { ctx.stellatype().accept(this) })
+    }
+
     private fun getVariablesInfoFromPattern(pattern: PatternContext, type: Type): List<Pair<String, Type>> {
         return when (pattern) {
             is PatternVarContext -> listOf(Pair(pattern.name.text, type))
@@ -1011,4 +1224,7 @@ class TypeCheckVisitor(
     }
 
     private fun Type.isNotApplicable(other: Type): Boolean = !this.isApplicable(other)
+
+    private fun TypeCheckContext.isTypeReconstructionEnabled(): Boolean =
+        extensions.contains(StellaExtensions.TYPE_RECONSTRUCTION)
 }

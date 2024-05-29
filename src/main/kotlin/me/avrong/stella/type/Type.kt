@@ -12,6 +12,19 @@ abstract class Type {
     }
 
     fun isApplicable(other: Type, structuralSubtyping: Boolean): Boolean {
+        // Universal types
+        if (this is UniversalTypeVariable && other is UniversalTypeVariable)
+            return this.name == other.name
+        if (this is UniversalType && other is UniversalType) {
+            if (this.variables.size != other.variables.size) {
+                return false
+            }
+            return this.substitute(this.variables
+                .mapIndexed { index, typeVar -> Pair(typeVar, other.variables[index]) }.toMap())
+                .isApplicable(other.nestedType, structuralSubtyping)
+        }
+
+
         if (this == other) return true
         if (!structuralSubtyping) return false
 
@@ -69,5 +82,29 @@ abstract class Type {
             return innerType.isApplicableStruct(other.innerType) && other.innerType.isApplicableStruct(innerType)
 
         return false
+    }
+
+    fun Type.substitute(typesMapping: Map<UniversalTypeVariable, Type>): Type {
+        return when (this) {
+            is UniversalType -> {
+                val substituted = nestedType.substitute(typesMapping)
+                if (!typesMapping.keys.all { this.variables.contains(it) }) {
+                    UniversalType(this.variables, substituted)
+                } else {
+                    substituted
+                }
+            }
+
+            is FuncType -> FuncType(argTypes.map { it.substitute(typesMapping) }, returnType.substitute(typesMapping))
+            is ListType -> ListType(contentType.substitute(typesMapping))
+            is RecordType -> RecordType(fields.map { Pair(it.first, it.second.substitute(typesMapping)) })
+            is SumType -> SumType(right.substitute(typesMapping), left.substitute(typesMapping))
+            is TupleType -> TupleType(types.map { it.substitute(typesMapping) })
+            is VariantType -> VariantType(variants.map { Pair(it.first, it.second?.substitute(typesMapping)) })
+
+            is UniversalTypeVariable -> typesMapping.getOrDefault(this, this)
+
+            else -> this
+        }
     }
 }
