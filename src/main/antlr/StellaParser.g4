@@ -164,6 +164,7 @@ stellatype:
     | 'Unit'                                                    # TypeUnit
     | 'Top'                                                     # TypeTop
     | 'Bot'                                                     # TypeBottom
+    | 'auto'                                                    # TypeAuto
     | name = StellaIdent                                        # TypeVar
     | '(' type_ = stellatype ')' # TypeParens;
 
